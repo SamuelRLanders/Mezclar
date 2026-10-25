@@ -31,6 +31,7 @@ class SessionPlayerResponse(BaseModel):
     name: str
     ready: bool
     hidden: bool
+    is_mod: bool
 
 class SessionResponse(BaseModel):
     session_id: str
@@ -74,6 +75,4 @@ class HidePlayerRequest(BaseModel):
 
 class ModPlayerRequest(BaseModel):
     player_id: str
-
-class UnmodPlayerRequest(BaseModel):
-    player_id: str
+    is_mod: bool

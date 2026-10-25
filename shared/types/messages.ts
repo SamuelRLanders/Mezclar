@@ -24,6 +24,7 @@ export interface SessionPlayer {
   name: string;
   ready: boolean;
   hidden: boolean;
+  is_mod: boolean
 }
 
 export interface JoinSessionResponse extends SessionPlayer {
@@ -69,8 +70,5 @@ export interface HidePlayerRequest {
 
 export interface ModPlayerRequest {
   player_id: string;
-}
-
-export interface UnmodPlayerRequest {
-  player_id: string;
+  is_mod: boolean;
 }

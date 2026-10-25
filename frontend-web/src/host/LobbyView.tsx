@@ -227,7 +227,27 @@ export default function LobbyView() {
     }
   }
   async function handleMod(player: SessionPlayer) {
-    return alert("Mod functionality is not implemented yet.");
+    if (!sessionId) {
+      return;
+    }
+    setActionMessage("")
+    setActionError("")
+    const nextMod = !player.is_mod
+    try {
+      const response = await fetch (`/api/session/${sessionId}/${nextMod ? "mod" : "unmod"}`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ player_id: player.player_id, is_mod: nextMod }),
+      });
+      if (!response.ok) {
+        throw new Error("Failed to mod player.");
+      }
+    } catch (error) {
+      console.error("Failed to mod player:", error);
+      setActionError(error instanceof Error ? error.message : "Failed to mod player.");
+    }
   }
   return (
     <main
@@ -359,7 +379,7 @@ export default function LobbyView() {
               >
                 {session.players.map((player) => (
                   <li key={player.player_id}>
-                    {player.hidden ? "Hidden player" : player.name} &middot; {player.ready ? "Ready" : "Not ready"}
+                    {player.hidden ? "Hidden player" : player.name} &middot; {player.ready ? "Ready" : "Not ready"} &middot; {player.is_mod ? "Mod" : ""}
                     <button type = "button" onClick = {() => handleKick(player)}>
                       Kick
                     </button>
@@ -367,7 +387,7 @@ export default function LobbyView() {
                       {player.hidden ? "Show" : "Hide"}
                     </button>
                     <button type = "button" onClick = {() => handleMod(player)}>
-                      Mod
+                      {player.is_mod ? "Remove Mod" : "Make Mod"}
                     </button>
                   </li>
                 ))}
