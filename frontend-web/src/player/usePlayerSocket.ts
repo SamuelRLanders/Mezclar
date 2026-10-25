@@ -6,6 +6,7 @@ import { playerSocketUrl } from "../api/client";
 export interface LobbyPlayer {
   player_id: string;
   name: string;
+  is_mod: boolean;
 }
 
 export interface GameStartedMessage {

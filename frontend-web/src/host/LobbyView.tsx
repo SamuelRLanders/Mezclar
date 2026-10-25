@@ -378,7 +378,7 @@ export default function LobbyView() {
               >
                 {session.players.map((player) => (
                   <li key={player.player_id}>
-                    {player.hidden ? "Hidden player" : player.name} &middot; {player.ready ? "Ready" : "Not ready"} &middot; {player.is_mod ? "Mod" : "Not Mod"}
+                    {player.hidden ? "Hidden player" : player.name} &middot; {player.ready ? "Ready" : "Not ready"} &middot; {player.is_mod ? "Mod" : ""}
                     <button type = "button" onClick = {() => handleKick(player)}>
                       Kick
                     </button>

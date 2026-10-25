@@ -157,7 +157,7 @@ async def hide_player(session_id: str, request: HidePlayerRequest) -> SessionPla
 
 @router.post("/session/{session_id}/mod")
 async def mod_player(session_id: str, request: ModPlayerRequest) -> SessionPlayerResponse:
-    session = get_or_create_session(session_id)
+    session = get_session(session_id)
     if not session:
         raise HTTPException(
             status_code=404,

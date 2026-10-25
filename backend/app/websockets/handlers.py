@@ -11,6 +11,7 @@ def public_players(session: Session) -> list[dict]:
         {
             "player_id": player.player_id,
             "name": "Hidden player" if player.hidden else player.name,
+            "is_mod": player.is_mod,
         }
         for player in session.players.values()
     ]
@@ -25,6 +26,7 @@ async def broadcast_roster(
         message={
             "type": "players_updated",
             "players": public_players(session),
+
         },
         exclude=exclude,
     )

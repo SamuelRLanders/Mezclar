@@ -6,6 +6,8 @@ interface PlayerRosterProps {
 }
 
 export default function PlayerRoster({ players, playerId }: PlayerRosterProps) {
+  const me = players.find((player) => player.player_id === playerId);
+  const isMod = me?.is_mod === true;
   return (
     <section
       style={{
@@ -32,6 +34,12 @@ export default function PlayerRoster({ players, playerId }: PlayerRosterProps) {
             <li key={player.player_id}>
               {player.name}
               {player.player_id === playerId ? " (you)" : ""}
+              {isMod && player.player_id != playerId && (
+                <>
+              <button>Kick</button>
+              <button>Hide</button>
+              </>
+            )}
             </li>
           ))}
         </ul>
