@@ -232,14 +232,13 @@ export default function LobbyView() {
     }
     setActionMessage("")
     setActionError("")
-    const nextMod = !player.is_mod
     try {
-      const response = await fetch (`/api/session/${sessionId}/${nextMod ? "mod" : "unmod"}`, {
+      const response = await fetch (`/api/session/${sessionId}/mod`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ player_id: player.player_id, is_mod: nextMod }),
+        body: JSON.stringify({ player_id: player.player_id, is_mod: !player.is_mod }),
       });
       if (!response.ok) {
         throw new Error("Failed to mod player.");
@@ -379,7 +378,7 @@ export default function LobbyView() {
               >
                 {session.players.map((player) => (
                   <li key={player.player_id}>
-                    {player.hidden ? "Hidden player" : player.name} &middot; {player.ready ? "Ready" : "Not ready"} &middot; {player.is_mod ? "Mod" : ""}
+                    {player.hidden ? "Hidden player" : player.name} &middot; {player.ready ? "Ready" : "Not ready"} &middot; {player.is_mod ? "Mod" : "Not Mod"}
                     <button type = "button" onClick = {() => handleKick(player)}>
                       Kick
                     </button>
