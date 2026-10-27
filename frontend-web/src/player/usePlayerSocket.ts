@@ -7,6 +7,7 @@ export interface LobbyPlayer {
   player_id: string;
   name: string;
   is_mod: boolean;
+  is_hidden: boolean;
 }
 
 export interface GameStartedMessage {

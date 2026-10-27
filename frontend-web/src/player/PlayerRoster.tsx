@@ -3,9 +3,11 @@ import type { LobbyPlayer } from "./usePlayerSocket";
 interface PlayerRosterProps {
   players: LobbyPlayer[];
   playerId: string | null;
+  onKick?: (player: LobbyPlayer) => void;
+  onHide?: (player: LobbyPlayer) => void;
 }
 
-export default function PlayerRoster({ players, playerId }: PlayerRosterProps) {
+export default function PlayerRoster({ players, playerId, onKick, onHide }: PlayerRosterProps) {
   const me = players.find((player) => player.player_id === playerId);
   const isMod = me?.is_mod === true;
   return (
@@ -36,10 +38,10 @@ export default function PlayerRoster({ players, playerId }: PlayerRosterProps) {
               {player.player_id === playerId ? " (you)" : ""}
               {isMod && player.player_id != playerId && (
                 <>
-              <button>Kick</button>
-              <button>Hide</button>
-              </>
-            )}
+                  <button onClick={() => onKick?.(player)}>Kick</button>
+                  <button onClick={() => onHide?.(player)}>Hide</button>
+                </>
+              )}
             </li>
           ))}
         </ul>

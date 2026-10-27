@@ -5,7 +5,7 @@ import { GAMES } from "../host/games";
 import { updateReadyStatus } from "../api/client";
 import GameRules from "./GameRules";
 import PlayerRoster from "./PlayerRoster";
-import { usePlayerSocket } from "./usePlayerSocket";
+import { type LobbyPlayer, usePlayerSocket } from "./usePlayerSocket";
 
 interface PlayerLobbyState {
   playerId?: string;
@@ -62,6 +62,31 @@ export default function PlayerLobby() {
       setError(error instanceof Error ? error.message : "Could not update ready status.");
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function handleKick(target: LobbyPlayer) {
+    try { 
+      await fetch(`/api/session/${sessionId}/kick`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ player_id: target.player_id }),
+    });
+    } catch (error) {
+      setError(error instanceof Error ? error.message : "Could not kick player.");
+    }
+  }
+
+  async function handleHide(target: LobbyPlayer) {
+    const nextHidden = !target.is_hidden;
+    try {
+      await fetch(`/api/session/${sessionId}/hide`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ player_id: target.player_id, hidden: nextHidden }),
+    });
+    } catch (error) {
+      setError(error instanceof Error ? error.message : "Could not hide player.");
     }
   }
 
@@ -153,7 +178,7 @@ export default function PlayerLobby() {
         </p>
       </section>
 
-      <PlayerRoster players={players} playerId={playerId} />
+      <PlayerRoster players={players} playerId={playerId} onKick={handleKick} onHide={handleHide} />
 
       {error && (
         <p
