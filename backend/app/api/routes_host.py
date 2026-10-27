@@ -52,6 +52,7 @@ def get_session_info(session_id: SessionCode) -> SessionResponse:
     return SessionResponse(
         session_id=session.session_id, player_count=len(players), players=players,
         game_started=session.game_started, host_name=session.host_name,
+        game_completed=session.game_completed,
         settings=session.settings, auto_generate_names=session.auto_generate_names,
         game_id=session.game_id, minimum_players=session.minimum_players,
         maximum_players=session.maximum_players, current_round=session.current_round,

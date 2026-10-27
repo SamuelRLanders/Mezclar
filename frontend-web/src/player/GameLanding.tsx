@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
-import { Link, useLocation } from "react-router-dom";
+import { Link, useLocation, useParams } from "react-router-dom";
 import { getSession, playerSocketUrl, type SessionResponse } from "../api/client";
+import { GAMES } from "../host/games";
 import QuipInput from "./QuipInput";
 
 interface GameLandingState {
@@ -11,11 +12,17 @@ interface GameLandingState {
 }
 
 export default function GameLanding() {
+  const { code } = useParams<{ code: string }>();
   const { state } = useLocation() as {
     state: GameLandingState | null;
   };
 
-  const { playerId, playerName, sessionId, gameId } = state || {};
+  const {
+    playerId = code ? sessionStorage.getItem("mezclar-player:" + code) : null,
+    playerName,
+    sessionId = code,
+    gameId,
+  } = state || {};
 
   // const sessionId = state?.sessionId;
 
@@ -80,6 +87,30 @@ export default function GameLanding() {
     };
   }, [sessionId, playerId]);
 
+  useEffect(() => {
+    if (!sessionId) return;
+    // Recover the current screen even if a WebSocket update was missed.
+    const intervalId = window.setInterval(() => {
+      getSession(sessionId)
+        .then((data) => {
+          setSession(data);
+          setError("");
+        })
+        .catch((error: unknown) => console.error("Failed to refresh game:", error));
+    }, 2000);
+    return () => window.clearInterval(intervalId);
+  }, [sessionId]);
+
+  if (session?.game_completed) {
+    return (
+      <main style={{ maxWidth: 560, margin: "0 auto", padding: 24, textAlign: "center" }}>
+        <h1>{GAMES.find((game) => game.id === session.game_id)?.name ?? session.game_id} complete</h1>
+        <p role="status">The activity has finished. Thanks for playing!</p>
+        <Link to="/">Return home</Link>
+      </main>
+    );
+  }
+
   return (
     <main
       style={{
@@ -101,7 +132,7 @@ export default function GameLanding() {
       <h1>Get ready!</h1>
 
       <p>
-        Welcome, {state?.playerName ?? "Player"}.
+        Welcome, {playerName ?? "Player"}.
       </p>
 
       {loading && <p>Loading game...</p>}
@@ -125,7 +156,7 @@ export default function GameLanding() {
       
 
       <p>
-        Game: {state?.gameId ?? "Unknown"}
+        Game: {gameId ?? "Unknown"}
       </p>
 
       <Link to="/">Leave game</Link>

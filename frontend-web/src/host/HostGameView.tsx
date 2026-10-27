@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { advanceRound, getSession, type SessionResponse } from "../api/client";
+import { GAMES } from "./games";
 
 export default function HostGameView() {
   const { code } = useParams<{ code: string }>();
@@ -74,6 +75,16 @@ export default function HostGameView() {
     } finally {
       setIsAdvancing(false);
     }
+  }
+
+  if (session?.game_completed) {
+    return (
+      <main style={{ maxWidth: 900, margin: "0 auto", padding: 24 }}>
+        <h1>{GAMES.find((game) => game.id === session.game_id)?.name ?? session.game_id} complete</h1>
+        <p role="status">The activity has finished. Thanks for playing!</p>
+        <Link to="/">Return home</Link>
+      </main>
+    );
   }
 
   return (

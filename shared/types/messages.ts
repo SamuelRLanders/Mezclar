@@ -51,6 +51,7 @@ export interface SessionResponse {
   players: SessionPlayer[];
   auto_generate_names: boolean;
   game_started: boolean;
+  game_completed: boolean;
   game_id: string | null;
   minimum_players: number | null;
   maximum_players: number | null;

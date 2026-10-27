@@ -23,6 +23,7 @@ class Session:
         self.minimum_players: int | None = None
         self.maximum_players: int | None = None
         self.game_started: bool = False
+        self.game_completed: bool = False
         # Gameplay state
         self.current_round: int = 0
         self.current_prompt: str | None = None
@@ -69,6 +70,9 @@ class Session:
         return self.players.get(player_id)
 
     def submit_answer(self, player_id: str, answer: str) -> None:
+        if self.game_completed:
+            raise ValueError("The game has finished.")
+
         if not self.game_started:
             raise ValueError("The game has not started.")
 
@@ -173,6 +177,9 @@ class Session:
         return player
 
     def advance_round(self) -> None:
+        if self.game_completed:
+            raise ValueError("The game has finished.")
+
         if not self.game_started:
             raise ValueError("The game has not started.")
 
@@ -182,7 +189,8 @@ class Session:
         next_round = self.current_round + 1
 
         if next_round > len(QUIPLASH_PROMPTS):
-            raise ValueError("There are no more rounds.")
+            self.game_completed = True
+            return
 
         self.current_round = next_round
         self.current_prompt = QUIPLASH_PROMPTS[next_round - 1]

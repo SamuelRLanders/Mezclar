@@ -37,6 +37,7 @@ class SessionResponse(BaseModel):
     players: list[SessionPlayerResponse]
     game_started: bool
     host_name: str
+    game_completed: bool
     settings: dict[str, JsonValue]
     auto_generate_names: bool
     game_id: str | None
