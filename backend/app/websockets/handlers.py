@@ -71,6 +71,8 @@ async def handle_join(
             "game_id": session.game_id,
         })
 
+    await send_player_prompt(session, player_id)
+
     try:
         while True:
             await websocket.receive_text()
@@ -80,3 +82,43 @@ async def handle_join(
             session_id=session.session_id,
             player_id=player_id,
         )
+
+
+async def send_player_prompt(
+    session: Session,
+    player_id: str,
+    round_number: int | None = None,
+) -> None:
+    """Send the prompt assigned to this player's group."""
+    if not session.game_started or session.game_id != "quiplash":
+        return
+
+    if round_number is None:
+        round_number = session.current_round
+
+    try:
+        group_index = session.get_player_group_index(
+            round_number,
+            player_id,
+        )
+    except ValueError:
+        return
+
+    prompt = session.group_prompts.get(
+        round_number,
+        {},
+    ).get(group_index)
+
+    if prompt is None:
+        return
+
+    await connection_manager.send_to_player(
+        session_id=session.session_id,
+        player_id=player_id,
+        message={
+            "type": "player_prompt",
+            "session_id": session.session_id,
+            "current_round": round_number,
+            "current_prompt": prompt,
+        },
+    )

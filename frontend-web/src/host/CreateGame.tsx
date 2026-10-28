@@ -20,6 +20,7 @@ export default function CreateGame() {
   const navigate = useNavigate();
   const [hostName, setHostName] = useState("");
   const [gameId, setGameId] = useState("");
+  const [rounds, setRounds] = useState(3);
   const [options, setOptions] = useState<GameOptionValues>(defaultOptionValues);
   const [isCreating, setIsCreating] = useState(false);
   const [error, setError] = useState("");
@@ -46,7 +47,14 @@ export default function CreateGame() {
       const response = await fetch("/api/session", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ host_name: hostName.trim(), settings: { gameId: selectedGame.id, options } }),
+        body: JSON.stringify({
+          host_name: hostName.trim(),
+          settings: {
+            gameId: selectedGame.id,
+            options,
+            ...(selectedGame.id === "quiplash" ? { rounds } : {}),
+          },
+        }),
       });
 
       if (!response.ok) {
@@ -163,6 +171,35 @@ export default function CreateGame() {
             ))}
           </div>
         </section>
+
+        {selectedGame?.id === "quiplash" && (
+          <section className="create__section" aria-labelledby="rounds-heading">
+            <h2 className="create__heading" id="rounds-heading">
+              Number of rounds
+            </h2>
+
+            <label htmlFor="rounds-select">
+              Submission rounds
+            </label>
+
+            <select
+              id="rounds-select"
+              className="create__name"
+              value={rounds}
+              onChange={(event) => setRounds(Number(event.target.value))}
+            >
+              {[1, 2, 3, 4, 5].map((count) => (
+                <option key={count} value={count}>
+                  {count} {count === 1 ? "round" : "rounds"}
+                </option>
+              ))}
+            </select>
+
+            <p className="create__hint">
+              Players will be regrouped between rounds.
+            </p>
+          </section>
+        )}
 
         <div className="create__actions">
           {error && <p className="create__hint" role="alert">{error}</p>}

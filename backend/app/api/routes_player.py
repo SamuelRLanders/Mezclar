@@ -8,12 +8,15 @@ from backend.app.models.schemas import (
     SubmitNameRequest,
     UpdateReadyStatusRequest,
     SessionPlayerResponse,
-    SubmitAnswerRequest
+    SubmitAnswerRequest,
+    SubmitVoteRequest
 )
 
 from fastapi import APIRouter, HTTPException
 from backend.app.sessions.registry import get_or_create_session, get_session
 from backend.app.naming.generator import generate_unique_name, validate_name
+
+from backend.app.api.voting import start_voting
 
 router = APIRouter()
 
@@ -96,10 +99,10 @@ def update_ready_status(session_id: str, player_id: str, request: UpdateReadySta
         player = session.set_player_ready(player_id, request.ready)
     except ValueError as error:
         raise HTTPException(status_code=404, detail=str(error)) from error
-    return SessionPlayerResponse(player_id=player.player_id, name=player.name, ready=player.ready, hidden=player.hidden)
+    return SessionPlayerResponse(player_id=player.player_id, name=player.name, ready=player.ready, hidden=player.hidden, is_mod=player.is_mod)
 
 @router.post("/session/{session_id}/submit-answer")
-def submit_answer(
+async def submit_answer(
     session_id: str,
     request: SubmitAnswerRequest,
 ) -> dict[str, str]:
@@ -119,4 +122,36 @@ def submit_answer(
             detail=str(error),
         )
 
+    print("Submit!")
+
+    if session.all_players_submitted(session.current_round):
+        print("All Players Submitted!")
+        await start_voting(session, session.current_round)
+
     return {"message": "Answer submitted successfully."}
+
+@router.post("/session/{session_id}/submit-vote")
+def submit_vote(
+    session_id: str,
+    request: SubmitVoteRequest,
+) -> dict[str, str]:
+    session = get_session(session_id)
+
+    if session is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Session not found",
+        )
+
+    try:
+        session.submit_vote(
+            request.voter_id,
+            request.answer_owner_id,
+        )
+    except ValueError as error:
+        raise HTTPException(
+            status_code=400,
+            detail=str(error),
+        )
+
+    return {"message": "Vote submitted successfully."}

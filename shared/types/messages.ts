@@ -42,6 +42,14 @@ export interface StartGameRequest {
   maximum_players: number;
 }
 
+export interface SessionGroup {
+  group_index: number;
+  prompt: string;
+  players: SessionPlayer[];
+  answers: Record<string, string>;
+  vote_counts: Record<string, number>;
+}
+
 export interface SessionResponse {
   session_id: string;
   host_name: string;
@@ -60,6 +68,10 @@ export interface SessionResponse {
   current_round: number;
   current_prompt: string;
   answers: Record<string, string>;
+  groups: SessionGroup[];
+  round_duration_seconds: number | null;
+  round_deadline: string | null;
+  phase: string;
 }
 
 export interface KickPlayerRequest {

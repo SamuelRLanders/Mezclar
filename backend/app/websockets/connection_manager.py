@@ -47,10 +47,23 @@ class ConnectionManager:
         ).get(player_id)
 
         if websocket is None:
+            print(
+                f"[WS] No connection found for session={session_id}, "
+                f"player={player_id}"
+            )
+            print(
+                f"[WS] Connected players: "
+                f"{list(self.active_connections.get(session_id, {}).keys())}"
+            )
             return
         try:
             await websocket.send_json(message)
-        except Exception:
+            print(
+                f"[WS] Sent {message.get('type')} "
+                f"to player={player_id}"
+            )
+        except Exception as error:
+            print(f"[WS] Send failed for player={player_id}: {error}")
             self.disconnect(session_id, player_id)
 
     async def broadcast_to_session(

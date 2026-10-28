@@ -123,6 +123,24 @@ export async function submitAnswer(
   ));
 }
 
+export async function submitVote(
+  sessionId: string,
+  voterId: string,
+  answerOwnerId: string,
+): Promise<void> {
+  await apiResponse(await fetch(
+    `/api/session/${sessionId}/submit-vote`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        voter_id: voterId,
+        answer_owner_id: answerOwnerId,
+      }),
+    },
+  ));
+}
+
 export async function advanceRound(
   sessionId: string,
 ): Promise<void> {
@@ -132,6 +150,19 @@ export async function advanceRound(
       method: "POST",
     },
   ));
+}
+
+export async function startRoundTimer(
+  sessionId: string,
+  durationSeconds: number,
+): Promise<void> {
+  await apiResponse(
+    await fetch(`/api/session/${sessionId}/start-timer`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ duration_seconds: durationSeconds }),
+    }),
+  );
 }
 
 export async function modPlayer(code: string, playerId: string, mod: boolean): Promise<SessionPlayer> {
