@@ -61,6 +61,8 @@ export interface SessionResponse {
   players: SessionPlayer[];
   auto_generate_names: boolean;
   allow_late_join: boolean;
+  requires_password: boolean;
+  profanity_filter: boolean;
   game_started: boolean;
   game_id: string | null;
   minimum_players: number | null;

@@ -10,14 +10,14 @@ def joined_lobby(client):
 def test_api_marks_existing_player_ready(client, joined_lobby):
     response = client.patch("/session/" + joined_lobby + "/players/first/ready", json={"ready": True})
     assert response.status_code == 200
-    assert response.json() == {"player_id": "first", "name": "Casey", "ready": True, "hidden": False}
+    assert response.json() == {"player_id": "first", "name": "Casey", "ready": True, "hidden": False, "is_mod": False}
 
 def test_api_marks_ready_player_not_ready(client, joined_lobby):
     url = "/session/" + joined_lobby + "/players/first/ready"
     client.patch(url, json={"ready": True})
     response = client.patch(url, json={"ready": False})
     assert response.status_code == 200
-    assert response.json() == {"player_id": "first", "name": "Casey", "ready": False, "hidden": False}
+    assert response.json() == {"player_id": "first", "name": "Casey", "ready": False, "hidden": False, "is_mod": False}
 
 def test_repeated_ready_requests_and_rejoining_do_not_reset_status(client, joined_lobby):
     url = "/session/" + joined_lobby + "/players/first/ready"

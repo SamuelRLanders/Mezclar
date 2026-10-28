@@ -112,6 +112,8 @@ def get_session_info(session_id: SessionCode) -> SessionResponse:
         game_started=session.game_started, host_name=session.host_name,
         settings=session.settings, auto_generate_names=session.auto_generate_names,
         allow_late_join=session.allow_late_join,
+        profanity_filter=session.use_profanity_filter,
+        requires_password=session.requires_password,
         game_id=session.game_id, minimum_players=session.minimum_players,
         maximum_players=session.maximum_players, current_round=session.current_round,
         current_prompt=session.current_prompt, answers=session.answers,
