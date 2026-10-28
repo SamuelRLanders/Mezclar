@@ -22,6 +22,7 @@ export default function JoinScreen() {
   const [name, setName] = useState("");
   const [isJoining, setIsJoining] = useState(false);
   const [error, setError] = useState("");
+  const [password, setPassword] = useState("");
 
   const storedPlayerId = code ? sessionStorage.getItem("mezclar-player:" + code) : null;
   const isReturningPlayer = !!session && session.players.some((player) => player.player_id === storedPlayerId);
@@ -213,7 +214,24 @@ export default function JoinScreen() {
               ↻
             </button>
           </div>
-
+          {session?.requires_password &&
+          <form className="join__form">
+            <label className="join__label">
+              Room Password
+            </label>
+            <div className="join_input_row">
+                <input
+                  type ="text"
+                  id="password"
+                  className="join__name"
+                  value={password}
+                  onChange={(event) => setPassword(event.target.value)}
+                  placeholder="Enter a password"
+                  maxLength={50}
+                  autoComplete = "new-password"
+                  />
+              </div>
+            </form>}
           {session?.auto_generate_names && <p>Leave blank for a generated name.</p>}
 
           <button

@@ -41,6 +41,8 @@ class SessionResponse(BaseModel):
     host_name: str
     settings: dict[str, JsonValue]
     auto_generate_names: bool
+    profanity_filter: bool
+    requires_password: bool
     allow_late_join: bool
     game_id: str | None
     minimum_players: int | None
