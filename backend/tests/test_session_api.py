@@ -17,6 +17,7 @@ def test_create_session(client):
     assert session["players"] == []
     assert session["player_count"] == 0
     assert session["game_started"] is False
+    assert len(session.pop("host_token")) >= 32
     assert client.get("/session/" + session["session_id"]).json() == session
 
 def test_feature_branch_create_call_without_body_is_supported(client):
@@ -69,7 +70,7 @@ def test_join_session_records_player_in_right_lobby(client):
     assert response.status_code == 200
     player = {"player_id": "player1", "name": "Casey", "ready": False, "hidden": False}
     assert response.json() == {**player, "session_id": first, "game_started": False}
-    assert client.get("/session/" + first).json()["players"] == [player]
+    assert client.get("/session/" + first).json()["players"] == [{**player, "is_mod": False}]
     assert client.get("/session/" + second).json()["players"] == []
 
 @pytest.mark.parametrize("payload", [
