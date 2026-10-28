@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { GAMES, formatPlayerRange, formatTimeRange } from "./games";
-import { createSession } from "../api/client";
 import GameSelect from "./GameSelect";
 import {
   GAME_OPTIONS,
@@ -31,9 +30,6 @@ export default function CreateGame() {
   const selectedGame = GAMES.find((game) => game.id === gameId);
   const visibleGames = filterGames(GAMES, filters);
   const filtersActive = activeFilterCount(filters) > 0;
-  const [password, setPassword] = useState("");
-
-  const passwordRequired = options["requiresPassword"] ?? false;
 
   function setOption(id: string, value: boolean) {
     setOptions((previous) => ({ ...previous, [id]: value }));
@@ -41,28 +37,37 @@ export default function CreateGame() {
 
   async function handleStart() {
     if (!selectedGame || !hostName.trim() || isCreating) return;
-    
-    if (passwordRequired && !password.trim()) {
-      setError("Please enter a password for the game.");
-      return;
-    }
 
     setIsCreating(true);
     setError("");
 
     try {
-      const session = await createSession(hostName.trim(), selectedGame.id, options, password.trim() || undefined);
-      navigate("/host/lobby/", {
+      
+      const response = await fetch("/api/session", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ host_name: hostName.trim(), settings: { gameId: selectedGame.id, options } }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Server returned status ${response.status}`);
+      }
+
+      const data: { session_id: string } = await response.json();
+
+      navigate("/host/lobby/" + data.session_id, {
         state: {
-          sessionId: session.session_id,
+          sessionId: data.session_id,
           gameId: selectedGame.id,
           options,
-          password,
         },
       });
+
     } catch (error) {
+
       console.error("Failed to create session:", error);
-      setError(error instanceof Error ? error.message : "Failed to create session. Please try again.");
+      setError("Unable to create a game session. Please try again.");
+
     } finally {
       setIsCreating(false);
     }
@@ -156,19 +161,6 @@ export default function CreateGame() {
                 <span className="option__switch" aria-hidden="true" />
               </label>
             ))}
-            {passwordRequired && (
-              <label className="option option--password">
-                <span className="option__text">Room password</span>
-                <input
-                  type ="text"
-                  value={password}
-                  onChange={(event) => setPassword(event.target.value)}
-                  placeholder="Enter a password"
-                  maxLength={50}
-                  autoComplete = "new-password"
-                  />
-              </label>
-            )}
           </div>
         </section>
 
