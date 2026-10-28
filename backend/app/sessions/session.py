@@ -17,12 +17,14 @@ class Session:
         self.used_names: set[str] = set()
         self.use_profanity_filter: bool = isinstance(options, dict) and options.get("useProfanityFilter") is True
         self.allow_late_join: bool = isinstance(options, dict) and options.get("allowLateJoin") is True
+        self.requires_password: bool = isinstance(options, dict) and options.get("requiresPassword") is True
 
         # Game configuration
         self.game_id: str | None = None
         self.minimum_players: int | None = None
         self.maximum_players: int | None = None
         self.game_started: bool = False
+
 
     def set_auto_generate(self, enabled: bool) -> None:
         self.auto_generate_names = enabled

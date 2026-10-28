@@ -31,6 +31,9 @@ export default function CreateGame() {
   const selectedGame = GAMES.find((game) => game.id === gameId);
   const visibleGames = filterGames(GAMES, filters);
   const filtersActive = activeFilterCount(filters) > 0;
+  const [password, setPassword] = useState("");
+
+  const passwordRequired = options["requiresPassword"] ?? false;
 
   function setOption(id: string, value: boolean) {
     setOptions((previous) => ({ ...previous, [id]: value }));
@@ -38,6 +41,10 @@ export default function CreateGame() {
 
   async function handleStart() {
     if (!selectedGame || !hostName.trim() || isCreating) return;
+    if (passwordRequired && !password.trim()) {
+      setError("Please enter a password for the game.");
+      return;
+    }
 
     setIsCreating(true);
     setError("");
@@ -147,6 +154,19 @@ export default function CreateGame() {
                 <span className="option__switch" aria-hidden="true" />
               </label>
             ))}
+            {passwordRequired && (
+              <label className="option option--password">
+                <span className="option__text">Room password</span>
+                <input
+                  type ="password"
+                  value={password}
+                  onChange={(event) => setPassword(event.target.value)}
+                  placeholder="Enter a password"
+                  maxLength={50}
+                  autoComplete = "new-password"
+                  />
+              </label>
+            )}
           </div>
         </section>
 

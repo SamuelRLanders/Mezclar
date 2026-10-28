@@ -34,6 +34,13 @@ export const GAME_OPTIONS: GameOptionDef[] = [
     description:
       "Lets players join or rejoin after the game has started.",
     defaultValue: true,
+  },
+  {
+    id: "requiresPassword",
+    label: "Password required",
+    description:
+      "Requires players to enter a password to join the game.",
+    defaultValue: false,
   }
 ];
 

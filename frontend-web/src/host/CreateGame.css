@@ -428,6 +428,9 @@
   border-top: 1px solid var(--border);
 }
 
+.option option--password {
+  display: flex;
+}
 .option__text {
   display: flex;
   flex-direction: column;
