@@ -5,10 +5,11 @@ from backend.app.naming.generator import generate_unique_name, validate_name
 from backend.app.sessions.player import Player
 
 class Session:
-    def __init__(self, session_id: str, host_name: str = "Host", settings: dict[str, JsonValue] | None = None):
+    def __init__(self, session_id: str, host_name: str = "Host", settings: dict[str, JsonValue] | None = None, password: str | None = None):
         self.session_id = session_id
         self.host_name = host_name
         self.settings = deepcopy(settings) if settings is not None else {}
+        self.password = password
 
         self.players: dict[str, "Player"] = {}
 

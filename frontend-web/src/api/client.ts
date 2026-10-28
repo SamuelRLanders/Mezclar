@@ -39,11 +39,12 @@ export async function createSession(
   hostName: string,
   gameId: string,
   options: Record<string, boolean>,
+  password?: string
 ): Promise<SessionResponse> {
   return apiResponse(await fetch("/api/session", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ host_name: hostName, settings: { gameId, options } }),
+    body: JSON.stringify({ host_name: hostName, settings: { gameId, options }, password: password || null }),
   }));
 }
 

@@ -41,6 +41,7 @@ export default function CreateGame() {
 
   async function handleStart() {
     if (!selectedGame || !hostName.trim() || isCreating) return;
+    
     if (passwordRequired && !password.trim()) {
       setError("Please enter a password for the game.");
       return;
@@ -50,12 +51,13 @@ export default function CreateGame() {
     setError("");
 
     try {
-      const session = await createSession(hostName.trim(), selectedGame.id, options);
+      const session = await createSession(hostName.trim(), selectedGame.id, options, password.trim() || undefined);
       navigate("/host/lobby/", {
         state: {
           sessionId: session.session_id,
           gameId: selectedGame.id,
           options,
+          password,
         },
       });
     } catch (error) {
@@ -158,7 +160,7 @@ export default function CreateGame() {
               <label className="option option--password">
                 <span className="option__text">Room password</span>
                 <input
-                  type ="password"
+                  type ="text"
                   value={password}
                   onChange={(event) => setPassword(event.target.value)}
                   placeholder="Enter a password"

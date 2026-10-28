@@ -60,6 +60,7 @@ class CreateSessionRequest(BaseModel):
 
     host_name: str = Field(default="Host", min_length=1)
     settings: dict[str, JsonValue] = Field(default_factory=dict)
+    password: str | None = Field(default=None, min_length=1)
 
 class UpdateReadyStatusRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
