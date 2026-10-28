@@ -24,12 +24,14 @@ class JoinSessionResponse(BaseModel):
     session_id: str
     ready: bool
     hidden: bool
+    game_started: bool
 
 class SessionPlayerResponse(BaseModel):
     player_id: str
     name: str
     ready: bool
     hidden: bool
+    is_mod: bool
 
 class SessionResponse(BaseModel):
     session_id: str
@@ -39,6 +41,7 @@ class SessionResponse(BaseModel):
     host_name: str
     settings: dict[str, JsonValue]
     auto_generate_names: bool
+    allow_late_join: bool
     game_id: str | None
     minimum_players: int | None
     maximum_players: int | None
@@ -60,6 +63,7 @@ class CreateSessionRequest(BaseModel):
 
     host_name: str = Field(default="Host", min_length=1)
     settings: dict[str, JsonValue] = Field(default_factory=dict)
+    password: str | None = Field(default=None, min_length=1)
 
 class UpdateReadyStatusRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -72,6 +76,11 @@ class KickPlayerRequest(BaseModel):
 class HidePlayerRequest(BaseModel):
     player_id: str
     hidden: bool
+
+class ModPlayerRequest(BaseModel):
+    player_id: str
+    is_mod: bool
+
 
 class SubmitAnswerRequest(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")

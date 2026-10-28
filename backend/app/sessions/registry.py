@@ -24,7 +24,8 @@ def create_session(request: CreateSessionRequest | None = None) -> Session:
         for _ in range(10):
             session_id = generate_session_code()
             if session_id not in _sessions:
-                session = Session(session_id, request.host_name, request.settings)
+                print(f"Creating session with password: {request.password}")
+                session = Session(session_id, request.host_name, request.settings, request.password)
                 _sessions[session_id] = session
                 return session
     raise RuntimeError("Could not allocate a join code. Try again.")

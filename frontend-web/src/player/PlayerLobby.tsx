@@ -1,40 +1,17 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 
 import { GAMES } from "../host/games";
-import { playerSocketUrl, updateReadyStatus } from "../api/client";
+import { updateReadyStatus } from "../api/client";
+import GameRules from "./GameRules";
+import PlayerRoster from "./PlayerRoster";
+import { type LobbyPlayer, usePlayerSocket } from "./usePlayerSocket";
 
 interface PlayerLobbyState {
   playerId?: string;
   playerName?: string;
   sessionId?: string;
   gameId?: string;
-}
-
-interface GameStartedMessage {
-  type: "game_started";
-  session_id: string;
-  game_id: string;
-}
-
-interface LobbyPlayer {
-  player_id: string;
-  name: string;
-}
-
-interface ConnectedMessage {
-  type: "connected";
-  session_id: string;
-  player_id: string;
-  name: string;
-  ready: boolean;
-  game_id: string;
-  players: LobbyPlayer[];
-}
-
-interface PlayersUpdatedMessage {
-  type: "players_updated";
-  players: LobbyPlayer[];
 }
 
 export default function PlayerLobby() {
@@ -47,120 +24,33 @@ export default function PlayerLobby() {
 
   const sessionId = state?.sessionId ?? code;
   const playerId = state?.playerId ?? (sessionId ? sessionStorage.getItem("mezclar-player:" + sessionId) : null);
-  const [playerName, setPlayerName] = useState(state?.playerName ?? "Player");
-  const [gameId, setGameId] = useState<string | null>(state?.gameId ?? null);
-  const [ready, setReady] = useState(false);
-  const [players, setPlayers] = useState<LobbyPlayer[]>([]);
   const [saving, setSaving] = useState(false);
 
-  const [connectionStatus, setConnectionStatus] = useState(
-    "Connecting..."
-  );
-
-  const [error, setError] = useState("");
+  const {
+    playerName,
+    gameId,
+    ready,
+    setReady,
+    players,
+    connectionStatus,
+    error,
+    setError,
+  } = usePlayerSocket(sessionId, playerId, {
+    initialName: state?.playerName,
+    initialGameId: state?.gameId,
+    onGameStarted: (message, connectedName) => {
+      navigate(`/player/${sessionId}/game`, {
+        state: {
+          playerId,
+          playerName: connectedName,
+          sessionId,
+          gameId: message.game_id,
+        },
+      });
+    },
+  });
 
   const game = GAMES.find((game) => game.id === gameId);
-  const rules = game?.rules?.split("\n").map((rule) => rule.trim()).filter(Boolean) ?? [];
-
-  useEffect(() => {
-    if (!sessionId || !playerId) {
-      setError("Missing session or player information.");
-      setConnectionStatus("Disconnected");
-      return;
-    }
-
-    let active = true;
-    let connectedName = state?.playerName ?? "Player";
-    const websocket = new WebSocket(
-      playerSocketUrl(sessionId, playerId)
-    );
-
-    websocket.onopen = () => {
-      if (!active) return;
-      setConnectionStatus("Connected");
-      setError("");
-    };
-
-    websocket.onmessage = (event) => {
-      if (!active) return;
-      try {
-        const message = JSON.parse(event.data);
-
-        if (message.type === "kicked") {
-          leaveLobby("You have been kicked from the session.")
-          return;
-        }
-
-        if (message.type === "connected") {
-          const connectedMessage = message as ConnectedMessage;
-
-          connectedName = connectedMessage.name;
-          setPlayerName(connectedMessage.name);
-          setReady(connectedMessage.ready);
-          setGameId(connectedMessage.game_id);
-          setPlayers(connectedMessage.players);
-        }
-        if (message.type === "players_updated") {
-          const playersUpdatedMessage =
-            message as PlayersUpdatedMessage;
-
-          setPlayers(playersUpdatedMessage.players);
-        }
-        if (message.type === "game_started") {
-          const gameStartedMessage =
-            message as GameStartedMessage;
-
-          navigate(`/player/${sessionId}/game`, {
-            state: {
-              playerId,
-              playerName: connectedName,
-              sessionId,
-              gameId: gameStartedMessage.game_id,
-            },
-          });
-        }
-      } catch (error) {
-        console.error(
-          "Failed to process WebSocket message:",
-          error
-        );
-      }
-    };
-
-    websocket.onerror = () => {
-      if (!active) return;
-      setConnectionStatus("Connection error");
-      setError("Unable to connect to the game server.");
-      setGameId(null);
-      setPlayers([]);
-    };
-
-    websocket.onclose = (event) => {
-      if (!active) return;
-      if (event.code === 4403) {
-        leaveLobby("You are no longer in this lobby")
-        return;
-      }
-      setConnectionStatus("Disconnected");
-      setError("Lost connection to the game server.");
-      setGameId(null);
-      setPlayers([]);
-    };
-
-    return () => {
-      active = false;
-      websocket.close();
-    };
-
-    function leaveLobby(notice: string) {
-      active = false;
-      websocket.close();
-      if (sessionId) {
-        sessionStorage.removeItem("mezclar-player:" + sessionId)
-      }
-      navigate("/", { replace: true, state: { notice } });
-    }
-  }, [navigate, playerId, state?.playerName, sessionId]);
 
   async function handleReady() {
     if (!sessionId || !playerId || saving) return;
@@ -172,6 +62,31 @@ export default function PlayerLobby() {
       setError(error instanceof Error ? error.message : "Could not update ready status.");
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function handleKick(target: LobbyPlayer) {
+    try { 
+      await fetch(`/api/session/${sessionId}/kick`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ player_id: target.player_id }),
+    });
+    } catch (error) {
+      setError(error instanceof Error ? error.message : "Could not kick player.");
+    }
+  }
+
+  async function handleHide(target: LobbyPlayer) {
+    const nextHidden = !target.is_hidden;
+    try {
+      await fetch(`/api/session/${sessionId}/hide`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ player_id: target.player_id, hidden: nextHidden }),
+    });
+    } catch (error) {
+      setError(error instanceof Error ? error.message : "Could not hide player.");
     }
   }
 
@@ -190,42 +105,7 @@ export default function PlayerLobby() {
         Welcome to the game, {playerName}.
       </p>
 
-      {game && (
-        <section
-          style={{
-            margin: "24px 0",
-            padding: 24,
-            border: "1px solid var(--border)",
-            borderRadius: 12,
-            textAlign: "left",
-          }}
-        >
-          <h2 style={{ marginTop: 0, textAlign: "center" }}>
-            {game.name}
-          </h2>
-
-          <h3 style={{ marginBottom: 8 }}>Rules</h3>
-
-          {rules.length > 0 ? (
-            <ul
-              style={{
-                marginTop: 0,
-                paddingLeft: 24,
-                color: "var(--text-muted)",
-                lineHeight: 1.6,
-              }}
-            >
-              {rules.map((rule, index) => (
-                <li key={index}>{rule}</li>
-              ))}
-            </ul>
-          ) : (
-            <p style={{ marginTop: 0, color: "var(--text-muted)" }}>
-              Rules for this game are not available yet. Ask the host how to play.
-            </p>
-          )}
-        </section>
-      )}
+      {game && <GameRules game={game} />}
 
       <section
         style={{
@@ -298,40 +178,7 @@ export default function PlayerLobby() {
         </p>
       </section>
 
-      <section
-        style={{
-          margin: "24px 0",
-          padding: 24,
-          border: "1px solid var(--border)",
-          borderRadius: 12,
-          textAlign: "left",
-        }}
-      >
-        <h2 style={{ marginTop: 0, textAlign: "center" }}>
-          Players ({players.length})
-        </h2>
-
-        {players.length > 0 ? (
-          <ul
-            style={{
-              margin: 0,
-              paddingLeft: 24,
-              lineHeight: 1.6,
-            }}
-          >
-            {players.map((player) => (
-              <li key={player.player_id}>
-                {player.name}
-                {player.player_id === playerId ? " (you)" : ""}
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <p style={{ margin: 0, color: "var(--text-muted)" }}>
-            No players to show yet.
-          </p>
-        )}
-      </section>
+      <PlayerRoster players={players} playerId={playerId} onKick={handleKick} onHide={handleHide} />
 
       {error && (
         <p

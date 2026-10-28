@@ -22,11 +22,25 @@ export const GAME_OPTIONS: GameOptionDef[] = [
     defaultValue: false,
   },
   {
-    id: "profanityFilter",
+    id: "useProfanityFilter",
     label: "Profanity filter",
     description:
       "Filters out offensive language from submitted text.",
     defaultValue: true,
+  },
+  {
+    id: "allowLateJoin",
+    label: "Allow late joining",
+    description:
+      "Lets players join or rejoin after the game has started.",
+    defaultValue: true,
+  },
+  {
+    id: "requiresPassword",
+    label: "Password required",
+    description:
+      "Requires players to enter a password to join the game.",
+    defaultValue: false,
   }
 ];
 

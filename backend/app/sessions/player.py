@@ -4,3 +4,4 @@ class Player:
         self.name = name
         self.ready = False
         self.hidden: bool = False
+        self.is_mod: bool = False

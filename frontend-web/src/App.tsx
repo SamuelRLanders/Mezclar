@@ -6,6 +6,7 @@ import CreateGame from "./host/CreateGame";
 import LobbyView from "./host/LobbyView";
 import PlayerLobby from "./player/PlayerLobby";
 import GameLanding from "./player/GameLanding";
+import GameInSession from "./player/GameInSession";
 import HostGameView from "./host/HostGameView";
 
 export default function App() {
@@ -14,6 +15,7 @@ export default function App() {
       <Route path="/" element={<LandingPage />} />
       <Route path="/join/:code" element={<JoinScreen />} />
       <Route path="/player/:code" element={<PlayerLobby />} />
+      <Route path="/player/:code/in-session" element={<GameInSession />} />
       <Route path="/player/:code/game" element={<GameLanding />} />
       <Route path="/host/new" element={<CreateGame />} />
       <Route path="/host/lobby/:code" element={<LobbyView />} />
