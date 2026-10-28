@@ -98,8 +98,9 @@ def update_ready_status(session_id: str, player_id: str, request: UpdateReadySta
         raise HTTPException(status_code=404, detail=str(error)) from error
     return SessionPlayerResponse(player_id=player.player_id, name=player.name, ready=player.ready, hidden=player.hidden, is_mod=player.is_mod)
 
+# Keep submissions on the timer's event loop so pauses and round changes are atomic.
 @router.post("/session/{session_id}/submit-answer")
-def submit_answer(
+async def submit_answer(
     session_id: str,
     request: SubmitAnswerRequest,
 ) -> dict[str, str]:
@@ -112,7 +113,7 @@ def submit_answer(
         )
 
     try:
-        session.submit_answer(request.player_id, request.answer)
+        session.submit_answer(request.player_id, request.answer, request.current_round)
     except ValueError as error:
         raise HTTPException(
             status_code=400,

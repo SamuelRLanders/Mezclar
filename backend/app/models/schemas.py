@@ -1,3 +1,5 @@
+from typing import Literal
+
 from pydantic import BaseModel, ConfigDict, Field, JsonValue, StrictBool
 
 class GenerateNameResponse(BaseModel):
@@ -40,6 +42,8 @@ class SessionResponse(BaseModel):
     game_started: bool
     host_name: str
     game_completed: bool
+    game_paused: bool
+    remaining_seconds: float
     settings: dict[str, JsonValue]
     auto_generate_names: bool
     allow_late_join: bool
@@ -49,6 +53,15 @@ class SessionResponse(BaseModel):
     current_round: int
     current_prompt: str | None
     answers: dict[str, str]
+
+class CreateSessionResponse(SessionResponse):
+    host_token: str
+
+class GameControlRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    action: Literal["pause", "resume", "skip", "extend"]
+    current_round: int = Field(ge=1, strict=True)
 
 class StartGameRequest(BaseModel):
     game_id: str
@@ -82,6 +95,7 @@ class SubmitAnswerRequest(BaseModel):
 
     player_id: str = Field(min_length=1)
     answer: str = Field(min_length=1, max_length=200)
+    current_round: int = Field(ge=1, strict=True)
 
 class ModPlayerRequest(BaseModel):
     player_id: str

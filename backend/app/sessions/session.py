@@ -1,14 +1,19 @@
 from copy import deepcopy
+from secrets import token_urlsafe
+from time import monotonic
 from pydantic import JsonValue
 
 from backend.app.naming.generator import generate_unique_name, validate_name
 from backend.app.sessions.player import Player
 from backend.app.games.quiplash.prompts import QUIPLASH_PROMPTS
 
+ROUND_SECONDS = 60
+
 class Session:
     def __init__(self, session_id: str, host_name: str = "Host", settings: dict[str, JsonValue] | None = None):
         self.session_id = session_id
         self.host_name = host_name
+        self.host_token = token_urlsafe(32)
         self.settings = deepcopy(settings) if settings is not None else {}
 
         self.players: dict[str, "Player"] = {}
@@ -25,6 +30,9 @@ class Session:
         self.maximum_players: int | None = None
         self.game_started: bool = False
         self.game_completed: bool = False
+        self.game_paused: bool = False
+        self.round_deadline: float | None = None
+        self.paused_remaining: float = 0
         # Gameplay state
         self.current_round: int = 0
         self.current_prompt: str | None = None
@@ -77,7 +85,13 @@ class Session:
     def get_player(self, player_id: str) -> Player | None:
         return self.players.get(player_id)
 
-    def submit_answer(self, player_id: str, answer: str) -> None:
+    @property
+    def remaining_seconds(self) -> float:
+        if self.round_deadline is None:
+            return self.paused_remaining
+        return max(0, self.round_deadline - monotonic())
+
+    def submit_answer(self, player_id: str, answer: str, current_round: int) -> None:
         if self.game_completed:
             raise ValueError("The game has finished.")
 
@@ -86,6 +100,12 @@ class Session:
 
         if self.game_id != "quiplash":
             raise ValueError("This game does not accept quip answers.")
+
+        if self.game_paused:
+            raise ValueError("The game is paused.")
+
+        if current_round != self.current_round or self.remaining_seconds <= 0:
+            raise ValueError("This round has ended.")
 
         if self.get_player(player_id) is None:
             raise ValueError("Player not found.")
@@ -153,6 +173,8 @@ class Session:
         self.current_prompt = QUIPLASH_PROMPTS[0]
         self.current_round = 1
         self.game_started = True
+        if self.game_id == "quiplash":
+            self.round_deadline = monotonic() + ROUND_SECONDS
 
     def regenerate_name(self, player_id: str) -> str: 
         player = self.get_player(player_id)
@@ -195,14 +217,51 @@ class Session:
             raise ValueError("This game does not support rounds.")
 
         next_round = self.current_round + 1
+        self.game_paused = False
+        self.paused_remaining = 0
 
         if next_round > len(QUIPLASH_PROMPTS):
             self.game_completed = True
+            self.round_deadline = None
             return
 
         self.current_round = next_round
         self.current_prompt = QUIPLASH_PROMPTS[next_round - 1]
         self.answers.clear()
+        self.round_deadline = monotonic() + ROUND_SECONDS
+
+    def control_game(self, action: str, current_round: int) -> None:
+        if not self.game_started or self.game_completed:
+            raise ValueError("The game is not running.")
+        if self.game_id != "quiplash":
+            raise ValueError("This game does not support round controls.")
+        if current_round != self.current_round:
+            raise ValueError("The round has changed. Refresh before trying again.")
+        if action == "skip":
+            self.advance_round()
+            return
+        if self.remaining_seconds <= 0:
+            raise ValueError("This round has ended.")
+
+        if action == "pause":
+            if self.game_paused:
+                raise ValueError("The game is already paused.")
+            self.paused_remaining = self.remaining_seconds
+            self.round_deadline = None
+            self.game_paused = True
+        elif action == "resume":
+            if not self.game_paused:
+                raise ValueError("The game is not paused.")
+            self.round_deadline = monotonic() + self.paused_remaining
+            self.paused_remaining = 0
+            self.game_paused = False
+        elif action == "extend":
+            if self.game_paused:
+                self.paused_remaining += 30
+            else:
+                self.round_deadline += 30
+        else:
+            raise ValueError("Unknown game control.")
 
     def mod_player(self, player_id: str, is_mod: bool) -> Player:
         player = self.get_player(player_id)

@@ -1,11 +1,27 @@
+import asyncio
+from contextlib import asynccontextmanager, suppress
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from backend.app.api.routes_websocket import router as websocket_router
 
 from backend.app.api.routes_host import router as host_router
 from backend.app.api.routes_player import router as player_router
+from backend.app.games.timer import run_round_timers
 
-app = FastAPI()
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    timer = asyncio.create_task(run_round_timers())
+    try:
+        yield
+    finally:
+        timer.cancel()
+        with suppress(asyncio.CancelledError):
+            await timer
+
+
+app = FastAPI(lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,

@@ -1,4 +1,8 @@
+from secrets import compare_digest
+
 from backend.app.models.schemas import (
+    CreateSessionResponse,
+    GameControlRequest,
     HidePlayerRequest,
     KickPlayerRequest,
     ToggleAutoNamesRequest,
@@ -8,10 +12,12 @@ from backend.app.models.schemas import (
     StartGameRequest,
     ModPlayerRequest,
 )
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, Header, HTTPException
 from backend.app.sessions.registry import get_or_create_session, get_session
 from backend.app.sessions import registry
 from backend.app.api import SessionCode
+from backend.app.games.timer import broadcast_round
+from backend.app.sessions.session import Session
 
 from backend.app.websockets.connection_manager import (
     connection_manager,
@@ -19,6 +25,15 @@ from backend.app.websockets.connection_manager import (
 from backend.app.websockets.handlers import broadcast_roster
 
 router = APIRouter()
+
+
+def get_host_session(session_id: str, x_host_token: str | None = Header(default=None)) -> Session:
+    session = get_session(session_id)
+    if session is None:
+        raise HTTPException(status_code=404, detail="Session not found")
+    if not x_host_token or not compare_digest(x_host_token.encode(), session.host_token.encode()):
+        raise HTTPException(status_code=403, detail="Only the host can control the game.")
+    return session
 
 @router.post("/session/{session_id}/toggle-auto-names")
 def toggle_auto_names(session_id: str, request: ToggleAutoNamesRequest) -> None:
@@ -30,13 +45,15 @@ def toggle_profanity_filter(session_id: str, request: ToggleAutoNamesRequest) ->
     session = get_or_create_session(session_id)
     session.set_profanity_filter(request.enabled)
 
-@router.post("/session", response_model=SessionResponse)
-def create_session(request: CreateSessionRequest | None = None) -> SessionResponse:
+@router.post("/session", response_model=CreateSessionResponse)
+def create_session(request: CreateSessionRequest | None = None) -> CreateSessionResponse:
     try:
         session = registry.create_session(request)
     except RuntimeError as error:
         raise HTTPException(status_code=503, detail=str(error)) from error
-    return get_session_info(session.session_id)
+    return CreateSessionResponse(
+        **get_session_info(session.session_id).model_dump(), host_token=session.host_token,
+    )
 
 @router.get("/session/{session_id}", response_model=SessionResponse)
 def get_session_info(session_id: SessionCode) -> SessionResponse:
@@ -54,6 +71,7 @@ def get_session_info(session_id: SessionCode) -> SessionResponse:
         session_id=session.session_id, player_count=len(players), players=players,
         game_started=session.game_started, host_name=session.host_name,
         game_completed=session.game_completed,
+        game_paused=session.game_paused, remaining_seconds=session.remaining_seconds,
         settings=session.settings, auto_generate_names=session.auto_generate_names,
         allow_late_join=session.allow_late_join,
         game_id=session.game_id, minimum_players=session.minimum_players,
@@ -157,7 +175,17 @@ async def hide_player(session_id: str, request: HidePlayerRequest) -> SessionPla
 
     return SessionPlayerResponse(player_id = player.player_id, name = player.name, ready = player.ready, hidden = player.hidden, is_mod = player.is_mod)
 
-@router.post("/session/{session_id}/advance-round")
+@router.post("/session/{session_id}/control", response_model=SessionResponse)
+async def control_game(request: GameControlRequest, session: Session = Depends(get_host_session)) -> SessionResponse:
+    try:
+        session.control_game(request.action, request.current_round)
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+    await broadcast_round(session)
+    return get_session_info(session.session_id)
+
+
+@router.post("/session/{session_id}/advance-round", dependencies=[Depends(get_host_session)])
 async def advance_round(session_id: str) -> dict[str, str | int]:
     session = get_session(session_id)
 
@@ -174,15 +202,7 @@ async def advance_round(session_id: str) -> dict[str, str | int]:
             detail=str(error),
         )
 
-    await connection_manager.broadcast_to_session(
-        session_id=session.session_id,
-        message={
-            "type": "round_updated",
-            "session_id": session.session_id,
-            "current_round": session.current_round,
-            "current_prompt": session.current_prompt,
-        },
-    )
+    await broadcast_round(session)
 
     return {
         "session_id": session.session_id,

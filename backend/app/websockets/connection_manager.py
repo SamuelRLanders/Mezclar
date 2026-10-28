@@ -66,7 +66,7 @@ class ConnectionManager:
 
         disconnected_players: list[str] = []
 
-        for player_id, websocket in connections.items():
+        for player_id, websocket in list(connections.items()):
             if player_id == exclude:
                 continue
 
