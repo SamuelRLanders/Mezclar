@@ -103,7 +103,6 @@ export async function hidePlayer(code: string, playerId: string, hidden: boolean
   return player;
 }
 
-
 export async function submitAnswer(
   sessionId: string,
   playerId: string,
@@ -131,4 +130,13 @@ export async function advanceRound(
       method: "POST",
     },
   ));
+}
+
+export async function modPlayer(code: string, playerId: string, mod: boolean): Promise<SessionPlayer> {
+  const player = await apiResponse<SessionPlayer>(await fetch("/api/session/" + code + "/mod", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ player_id: playerId, is_mod: mod }),
+  }));
+  return player;
 }

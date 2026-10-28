@@ -10,6 +10,7 @@ interface JoinSessionResponse {
   session_id: string;
   game_id: string;
   hidden: boolean;
+  game_started: boolean;
 }
 
 export default function JoinScreen() {
@@ -21,6 +22,10 @@ export default function JoinScreen() {
   const [name, setName] = useState("");
   const [isJoining, setIsJoining] = useState(false);
   const [error, setError] = useState("");
+
+  const storedPlayerId = code ? sessionStorage.getItem("mezclar-player:" + code) : null;
+  const isReturningPlayer = !!session && session.players.some((player) => player.player_id === storedPlayerId);
+  const lateJoinBlocked = !!session && session.game_started && !session.allow_late_join && !isReturningPlayer;
 
   useEffect(() => {
     if (!code) return;
@@ -39,7 +44,7 @@ export default function JoinScreen() {
   }, [code]);
 
   useEffect(() => {
-  if (!code || !session || !session.auto_generate_names || name.trim()) return;
+  if (!code || !session || session.game_started || !session.auto_generate_names || name.trim()) return;
 
   const playerId = sessionStorage.getItem("mezclar-player:" + code) ?? crypto.randomUUID();
 
@@ -101,7 +106,10 @@ export default function JoinScreen() {
       const sessionData: JoinSessionResponse = data;
 
       sessionStorage.setItem("mezclar-player:" + code, sessionData.player_id);
-      navigate(`/player/${sessionData.session_id}`, {
+      const destination = sessionData.game_started
+        ? `/player/${sessionData.session_id}/in-session`
+        : `/player/${sessionData.session_id}`;
+      navigate(destination, {
         state: {
           playerId: sessionData.player_id,
           playerName: sessionData.name,
@@ -133,6 +141,28 @@ export default function JoinScreen() {
 
             <p className="join__welcome">
               The game you are looking for doesn't exist. Check the code and try again.
+            </p>
+          </header>
+
+          <Link className="join__submit join__home" to="/">
+            Back to home
+          </Link>
+        </div>
+      </main>
+    );
+  }
+
+  if (lateJoinBlocked) {
+    return (
+      <main className="join">
+        <div className="join__inner">
+          <header className="join__header">
+            <p className="join__eyebrow">Game in progress</p>
+
+            <h1 className="join__title">{code}</h1>
+
+            <p className="join__welcome">
+              This game has already started and isn't accepting new players.
             </p>
           </header>
 

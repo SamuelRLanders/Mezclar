@@ -17,13 +17,10 @@ def generate_unique_name(used_names: set[str], max_attempts: int = 10) -> str:
     raise ValueError("Failed to generate a unique name after maximum attempts.")
 
 def validate_name(name: str) -> bool:
-    if not name or not name.strip():
-        return False
-    if len(name) > 50:
-        return False
-    words_in_name = name.split()
-    for word in words_in_name:
-        standardized_word = word.strip().lower()
-        if standardized_word in BLOCK_LIST:
-            return False
+    if name != None:
+        words_in_name = name.split()
+        for word in words_in_name:
+            standardized_word = word.strip().lower()
+            if standardized_word in BLOCK_LIST:
+                return False
     return True

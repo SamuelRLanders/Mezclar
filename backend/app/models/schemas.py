@@ -24,12 +24,14 @@ class JoinSessionResponse(BaseModel):
     session_id: str
     ready: bool
     hidden: bool
+    game_started: bool
 
 class SessionPlayerResponse(BaseModel):
     player_id: str
     name: str
     ready: bool
     hidden: bool
+    is_mod: bool
 
 class SessionResponse(BaseModel):
     session_id: str
@@ -40,6 +42,7 @@ class SessionResponse(BaseModel):
     game_completed: bool
     settings: dict[str, JsonValue]
     auto_generate_names: bool
+    allow_late_join: bool
     game_id: str | None
     minimum_players: int | None
     maximum_players: int | None
@@ -79,3 +82,7 @@ class SubmitAnswerRequest(BaseModel):
 
     player_id: str = Field(min_length=1)
     answer: str = Field(min_length=1, max_length=200)
+
+class ModPlayerRequest(BaseModel):
+    player_id: str
+    is_mod: bool

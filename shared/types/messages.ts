@@ -24,10 +24,12 @@ export interface SessionPlayer {
   name: string;
   ready: boolean;
   hidden: boolean;
+  is_mod: boolean
 }
 
 export interface JoinSessionResponse extends SessionPlayer {
   session_id: string;
+  game_started: boolean;
 }
 
 export interface UpdateReadyStatusRequest {
@@ -50,6 +52,7 @@ export interface SessionResponse {
   player_count: number;
   players: SessionPlayer[];
   auto_generate_names: boolean;
+  allow_late_join: boolean;
   game_started: boolean;
   game_completed: boolean;
   game_id: string | null;
@@ -67,4 +70,9 @@ export interface KickPlayerRequest {
 export interface HidePlayerRequest {
   player_id: string;
   hidden: boolean;
+}
+
+export interface ModPlayerRequest {
+  player_id: string;
+  is_mod: boolean;
 }
