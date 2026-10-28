@@ -69,7 +69,7 @@ def test_join_session_records_player_in_right_lobby(client):
     assert response.status_code == 200
     player = {"player_id": "player1", "name": "Casey", "ready": False, "hidden": False}
     assert response.json() == {**player, "session_id": first, "game_started": False}
-    assert client.get("/session/" + first).json()["players"] == [player]
+    assert client.get("/session/" + first).json()["players"] == [{**player, "is_mod": False}]
     assert client.get("/session/" + second).json()["players"] == []
 
 @pytest.mark.parametrize("payload", [

@@ -95,4 +95,4 @@ def update_ready_status(session_id: str, player_id: str, request: UpdateReadySta
         player = session.set_player_ready(player_id, request.ready)
     except ValueError as error:
         raise HTTPException(status_code=404, detail=str(error)) from error
-    return SessionPlayerResponse(player_id=player.player_id, name=player.name, ready=player.ready, hidden=player.hidden)
+    return SessionPlayerResponse(player_id=player.player_id, name=player.name, ready=player.ready, hidden=player.hidden, is_mod=player.is_mod)
