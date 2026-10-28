@@ -3,6 +3,7 @@ import { Link, useLocation, useParams } from "react-router-dom";
 import { getSession, playerSocketUrl, type SessionResponse } from "../api/client";
 import { GAMES } from "../host/games";
 import QuipInput from "./QuipInput";
+import useRoundTimer from "../useRoundTimer";
 
 interface GameLandingState {
   playerId?: string;
@@ -29,6 +30,7 @@ export default function GameLanding() {
   const [session, setSession] = useState<SessionResponse | null>(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
+  const remainingSeconds = useRoundTimer(session?.remaining_seconds ?? 0, session?.game_paused ?? false, session?.current_round ?? 0);
 
   useEffect(() => {
     if (!sessionId) {
@@ -142,12 +144,15 @@ export default function GameLanding() {
       {!loading && !error && session && (
         <section>
           <h2>Round {session.current_round}</h2>
+          <p role="status">{session.game_paused ? "Paused · " : ""}{remainingSeconds} seconds remaining</p>
           <p>{session.current_prompt ?? "No prompt selected yet."}</p>
           {session.game_id === "quiplash" && playerId && sessionId && (
             <QuipInput
               key={session.current_round}
               sessionId={sessionId}
               playerId={playerId}
+              currentRound={session.current_round}
+              disabled={session.game_paused || remainingSeconds === 0}
             />
           )}
         </section>

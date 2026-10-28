@@ -42,6 +42,8 @@ export interface StartGameRequest {
   maximum_players: number;
 }
 
+export type GameControlAction = "pause" | "resume" | "skip" | "extend";
+
 export interface SessionResponse {
   session_id: string;
   host_name: string;
@@ -55,6 +57,8 @@ export interface SessionResponse {
   allow_late_join: boolean;
   game_started: boolean;
   game_completed: boolean;
+  game_paused: boolean;
+  remaining_seconds: number;
   game_id: string | null;
   minimum_players: number | null;
   maximum_players: number | null;

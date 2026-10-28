@@ -1,8 +1,9 @@
 
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { advanceRound, getSession, type SessionResponse } from "../api/client";
+import { controlGame, getSession, type GameControlAction, type SessionResponse } from "../api/client";
 import { GAMES } from "./games";
+import useRoundTimer from "../useRoundTimer";
 
 export default function HostGameView() {
   const { code } = useParams<{ code: string }>();
@@ -11,8 +12,11 @@ export default function HostGameView() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
 
-  const [isAdvancing, setIsAdvancing] = useState(false);
-  const [advanceError, setAdvanceError] = useState("");
+  const [isControlling, setIsControlling] = useState(false);
+  const [controlError, setControlError] = useState("");
+  const remainingSeconds = useRoundTimer(session?.remaining_seconds ?? 0, session?.game_paused ?? false, session?.current_round ?? 0);
+  const hasHostAccess = !!code && !!sessionStorage.getItem("mezclar-host:" + code);
+  const controlsDisabled = isControlling || !hasHostAccess || !session?.game_started || session.game_completed || session.game_id !== "quiplash" || remainingSeconds === 0;
 
   useEffect(() => {
     if (!code) {
@@ -56,24 +60,24 @@ export default function HostGameView() {
     };
   }, [code]);
 
-  async function handleAdvanceRound() {
-    if (!code || isAdvancing) {
+  async function handleControl(action: GameControlAction) {
+    if (!code || !session || controlsDisabled) {
       return;
     }
 
-    setIsAdvancing(true);
-    setAdvanceError("");
+    setIsControlling(true);
+    setControlError("");
 
     try {
-      await advanceRound(code);
+      setSession(await controlGame(code, action, session.current_round));
     } catch (error) {
-      setAdvanceError(
+      setControlError(
         error instanceof Error
           ? error.message
-          : "Unable to start the next round.",
+          : "Unable to update the game.",
       );
     } finally {
-      setIsAdvancing(false);
+      setIsControlling(false);
     }
   }
 
@@ -112,6 +116,7 @@ export default function HostGameView() {
             <p style={{ color: "var(--text-muted)" }}>
               Round {session.current_round}
             </p>
+            <p role="status">{session.game_paused ? "Paused · " : ""}{remainingSeconds} seconds remaining</p>
             <h2>Current prompt</h2>
             <p>{session.current_prompt ?? "No prompt available."}</p>
           </section>
@@ -145,15 +150,22 @@ export default function HostGameView() {
       )}
 
       <section style={{ marginTop: 32, textAlign: "center" }}>
-        {advanceError && <p role="alert">{advanceError}</p>}
+        {controlError && <p role="alert">{controlError}</p>}
+        {session && !hasHostAccess && <p>Open the original host tab to control this game.</p>}
 
-        <button
-          type="button"
-          onClick={handleAdvanceRound}
-          disabled={isAdvancing || !session?.game_started}
-        >
-          {isAdvancing ? "Starting next round..." : "Start Next Round"}
-        </button>
+        <div style={{ display: "flex", justifyContent: "center", flexWrap: "wrap", gap: 8 }}>
+          <button
+            type="button"
+            onClick={() => handleControl(session?.game_paused ? "resume" : "pause")}
+            disabled={controlsDisabled}
+            aria-pressed={session?.game_paused ?? false}
+          >
+            {session?.game_paused ? "Resume" : "Pause"}
+          </button>
+          <button type="button" onClick={() => handleControl("skip")} disabled={controlsDisabled}>Skip round</button>
+          <button type="button" onClick={() => handleControl("extend")} disabled={controlsDisabled}>Add 30 seconds</button>
+        </div>
+        {isControlling && <p role="status">Updating game...</p>}
       </section>
 
       <p style={{ marginTop: 24 }}>

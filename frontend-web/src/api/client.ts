@@ -1,4 +1,5 @@
 import type {
+  GameControlAction,
   JoinSessionResponse,
   KickPlayerRequest,
   SessionPlayer,
@@ -24,7 +25,7 @@ export async function regenerateName(sessionId: string, player_id: string): Prom
   return data.name;
 }
 
-export type { SessionPlayer, SessionResponse } from "../../../shared/types/messages";
+export type { GameControlAction, SessionPlayer, SessionResponse } from "../../../shared/types/messages";
 
 async function apiResponse<T>(response: Response): Promise<T> {
   const data = await response.json();
@@ -40,11 +41,13 @@ export async function createSession(
   gameId: string,
   options: Record<string, boolean>,
 ): Promise<SessionResponse> {
-  return apiResponse(await fetch("/api/session", {
+  const session = await apiResponse<SessionResponse & { host_token: string }>(await fetch("/api/session", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ host_name: hostName, settings: { gameId, options } }),
   }));
+  sessionStorage.setItem("mezclar-host:" + session.session_id, session.host_token);
+  return session;
 }
 
 export async function getSession(code: string): Promise<SessionResponse> {
@@ -107,6 +110,7 @@ export async function submitAnswer(
   sessionId: string,
   playerId: string,
   answer: string,
+  currentRound: number,
 ): Promise<void> {
   await apiResponse(await fetch(
     `/api/session/${sessionId}/submit-answer`,
@@ -116,6 +120,7 @@ export async function submitAnswer(
       body: JSON.stringify({
         player_id: playerId,
         answer,
+        current_round: currentRound,
       }),
     },
   ));
@@ -128,8 +133,20 @@ export async function advanceRound(
     `/api/session/${sessionId}/advance-round`,
     {
       method: "POST",
+      headers: { "X-Host-Token": sessionStorage.getItem("mezclar-host:" + sessionId) ?? "" },
     },
   ));
+}
+
+export async function controlGame(code: string, action: GameControlAction, currentRound: number): Promise<SessionResponse> {
+  return apiResponse(await fetch(`/api/session/${code}/control`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "X-Host-Token": sessionStorage.getItem("mezclar-host:" + code) ?? "",
+    },
+    body: JSON.stringify({ action, current_round: currentRound }),
+  }));
 }
 
 export async function modPlayer(code: string, playerId: string, mod: boolean): Promise<SessionPlayer> {
