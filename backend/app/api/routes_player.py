@@ -153,8 +153,9 @@ def submit_vote(
 
     try:
         session.submit_vote(
-            request.voter_id,
-            request.answer_owner_id,
+            voter_id=request.voter_id,
+            group_index=request.group_index,
+            answer_owner_id=request.answer_owner_id,
         )
     except ValueError as error:
         raise HTTPException(

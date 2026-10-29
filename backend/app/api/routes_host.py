@@ -106,6 +106,46 @@ def get_session_info(session_id: SessionCode) -> SessionResponse:
                 "vote_counts": vote_counts,
             })
 
+    round_results = []
+
+    if session.game_id == "quiplash" and session.game_started:
+        for round_number in sorted(session.round_groups.keys()):
+            round_groups = session.round_groups.get(round_number, [])
+            round_prompts = session.group_prompts.get(round_number, {})
+            round_answers = session.group_answers.get(round_number, {})
+            round_votes = session.group_votes.get(round_number, {})
+
+            result_groups = []
+
+            for group_index, player_ids in enumerate(round_groups):
+                group_answers = round_answers.get(group_index, {})
+                group_votes = round_votes.get(group_index, {})
+
+                vote_counts = {
+                    player_id: sum(
+                        1
+                        for answer_owner_id in group_votes.values()
+                        if answer_owner_id == player_id
+                    )
+                    for player_id in group_answers
+                }
+
+                result_groups.append({
+                    "group_index": group_index,
+                    "prompt": round_prompts.get(group_index, ""),
+                    "players": [
+                        player for player in players
+                        if player.player_id in player_ids
+                    ],
+                    "answers": group_answers,
+                    "vote_counts": vote_counts,
+                })
+
+            round_results.append({
+                "round": round_number,
+                "groups": result_groups,
+            })
+
 
     return SessionResponse(
         session_id=session.session_id, player_count=len(players), players=players,
@@ -118,7 +158,8 @@ def get_session_info(session_id: SessionCode) -> SessionResponse:
         maximum_players=session.maximum_players, current_round=session.current_round,
         current_prompt=session.current_prompt, answers=session.answers,
         round_duration_seconds=session.round_duration_seconds, round_deadline=session.round_deadline,
-        groups=groups, phase=session.phase
+        groups=groups, phase=session.phase,
+        scores=session.scores, round_results=round_results
     )
 
 @router.post("/session/{session_id}/start")
@@ -253,8 +294,7 @@ async def advance_round(session_id: str) -> dict[str, str | int]:
         and session.round_duration_seconds is not None
     )
 
-    # Advance first. If this fails (for example, on the final round),
-    # leave the existing timer untouched.
+    # Advance to the next round or transition to the finished phase.
     try:
         session.advance_round()
     except ValueError as error:
@@ -267,7 +307,23 @@ async def advance_round(session_id: str) -> dict[str, str | int]:
 
     session.round_deadline = None
 
-    # If the host was using a timer, start a fresh one for the new round.
+    if session.phase == "finished":
+        await connection_manager.broadcast_to_session(
+            session.session_id,
+            {
+                "type": "game_finished",
+                "session_id": session.session_id,
+            },
+        )
+
+        return {
+            "session_id": session.session_id,
+            "current_round": session.current_round,
+            "current_prompt": session.current_prompt or "",
+            "phase": "finished",
+        }
+
+    # Start a fresh timer for the new round if the previous round used one.
     if timer_was_active:
         deadline = datetime.now(timezone.utc) + timedelta(
             seconds=session.round_duration_seconds

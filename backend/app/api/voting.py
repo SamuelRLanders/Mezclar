@@ -36,35 +36,46 @@ async def start_voting(session, round_number: int) -> None:
     prompts = session.group_prompts.get(round_number, {})
 
     
-    # Send each player only the answers from their own group.
-    for group_index, group in enumerate(groups):
-        answers = round_answers.get(group_index, {})
+    
+    # Send each player the answers from every OTHER group.
+    for player_id in session.players:
+        voter_group_index = session.get_player_group_index(
+            round_number,
+            player_id,
+        )
 
-        for player_id in group:
-            voting_options = [
+        voting_options_by_group = []
+
+        for group_index, group in enumerate(groups):
+            if group_index == voter_group_index:
+                continue
+
+            answers = round_answers.get(group_index, {})
+
+            voting_options_by_group.append(
                 {
-                    "player_id": answer_player_id,
-                    "answer": answer,
-                }
-                for answer_player_id, answer in answers.items()
-                if answer_player_id != player_id
-            ]
-
-            print(
-                f"[VOTING] Sending to player={player_id}, "
-                f"options={voting_options}"
-            )
-
-            await connection_manager.send_to_player(
-                session.session_id,
-                player_id,
-                {
-                    "type": "voting_started",
-                    "session_id": session.session_id,
-                    "current_round": round_number,
                     "group_index": group_index,
                     "prompt": prompts.get(group_index, ""),
-                    "answers": voting_options,
-                },
+                    "answers": [
+                        {
+                            "player_id": answer_player_id,
+                            "answer": answer,
+                        }
+                        for answer_player_id, answer in answers.items()
+                        if answer_player_id != player_id
+                    ],
+                }
             )
+
+        await connection_manager.send_to_player(
+            session.session_id,
+            player_id,
+            {
+                "type": "voting_started",
+                "session_id": session.session_id,
+                "current_round": round_number,
+                "groups": voting_options_by_group,
+            },
+        )
+
 

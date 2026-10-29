@@ -163,6 +163,7 @@ class Session:
     def submit_vote(
         self,
         voter_id: str,
+        group_index: int,
         answer_owner_id: str,
     ) -> None:
         if self.phase != "voting":
@@ -176,14 +177,31 @@ class Session:
         if answer_owner_id not in self.players:
             raise ValueError("Answer owner is not in this session.")
 
-        group_index = self.get_player_group_index(round_number, voter_id)
+        groups = self.round_groups.get(round_number, [])
+
+        if group_index < 0 or group_index >= len(groups):
+            raise ValueError("Invalid group.")
+
+        # Find the voter's group and the answer owner's group.
+        voter_group_index = self.get_player_group_index(
+            round_number,
+            voter_id,
+        )
         owner_group_index = self.get_player_group_index(
             round_number,
             answer_owner_id,
         )
 
-        if group_index != owner_group_index:
-            raise ValueError("You can only vote for answers in your group.")
+        if voter_group_index is None or owner_group_index is None:
+            raise ValueError("Player is not assigned to a group.")
+
+        # Players cannot vote on their own group's answers.
+        if group_index == voter_group_index:
+            raise ValueError("You cannot vote in your own group.")
+
+        # The answer must belong to the group being voted on.
+        if owner_group_index != group_index:
+            raise ValueError("That answer is not in the selected group.")
 
         if voter_id == answer_owner_id:
             raise ValueError("You cannot vote for your own answer.")
@@ -195,6 +213,7 @@ class Session:
         if answer_owner_id not in group_answers:
             raise ValueError("That player has no answer to vote for.")
 
+        # Store the vote under the TARGET group, not the voter's group.
         round_votes = self.group_votes.setdefault(round_number, {})
         group_votes = round_votes.setdefault(group_index, {})
 
@@ -202,7 +221,9 @@ class Session:
             raise ValueError("You have already voted in this group.")
 
         group_votes[voter_id] = answer_owner_id
-        self.scores[answer_owner_id] = self.scores.get(answer_owner_id, 0) + 1
+        self.scores[answer_owner_id] = (
+            self.scores.get(answer_owner_id, 0) + 1
+        )
 
     def all_players_submitted(self, round_number: int) -> bool:
         """Return whether every player assigned to this round submitted an answer."""
@@ -363,7 +384,8 @@ class Session:
         next_round = self.current_round + 1
 
         if next_round > self.total_rounds:
-            raise ValueError("There are no more rounds.")
+            self.phase = "finished"
+            return
 
         if next_round not in self.group_prompts:
             raise ValueError("Prompts have not been assigned for the next round.")
@@ -387,6 +409,7 @@ class Session:
 
     
     
+    
     def generate_round_groups(self) -> dict[int, list[list[str]]]:
         """Generate balanced groups while minimizing repeated pairings."""
         player_ids = list(self.players.keys())
@@ -398,21 +421,21 @@ class Session:
         if self.total_rounds < 1:
             raise ValueError("At least one round is required.")
 
-        # Respect player count and the number of unique prompts available.
+        if self.total_rounds > 5:
+            raise ValueError("A maximum of five rounds is supported.")
+
+        # Calculate the maximum feasible number of groups.
         max_groups_by_players = player_count // 2
         max_groups_by_prompts = len(QUIPLASH_PROMPTS) // self.total_rounds
 
         if max_groups_by_prompts < 1:
             raise ValueError("Not enough unique prompts for the selected rounds.")
 
-        # Aim for approximately five players per group.
-        target_group_count = ceil(player_count / 5)
+        # Favor groups of two while respecting prompt availability.
         group_count = min(
-            target_group_count,
             max_groups_by_players,
             max_groups_by_prompts,
         )
-        group_count = max(1, group_count)
 
         groups_by_round: dict[int, list[list[str]]] = {}
         previous_pairings: dict[tuple[str, str], int] = {}
@@ -421,18 +444,18 @@ class Session:
             best_groups = None
             best_score = float("inf")
 
-            # Search multiple candidate arrangements for the fewest repeats.
+            # Search randomized arrangements to minimize repeated pairings.
             for _ in range(500):
                 shuffled = player_ids.copy()
                 random.shuffle(shuffled)
 
                 groups = [[] for _ in range(group_count)]
 
-                # Distribute players evenly across groups.
+                # Distribute players as evenly as possible.
                 for index, player_id in enumerate(shuffled):
                     groups[index % group_count].append(player_id)
 
-                # Penalize pairings more heavily when they have repeated often.
+                # Penalize pairings based on how often they have occurred.
                 score = sum(
                     1 + previous_pairings.get(
                         tuple(sorted((player_a, player_b))), 0
@@ -446,10 +469,8 @@ class Session:
                     best_score = score
                     best_groups = groups
 
-                if score == sum(
-                    len(group) * (len(group) - 1) // 2
-                    for group in groups
-                ) and all(
+                # Stop early if this arrangement introduces no repeated pairs.
+                if all(
                     previous_pairings.get(
                         tuple(sorted((player_a, player_b))), 0
                     ) == 0
@@ -462,7 +483,7 @@ class Session:
             assert best_groups is not None
             groups_by_round[round_number] = best_groups
 
-            # Record pairings so future rounds can avoid repeating them.
+            # Record pairings for use when generating subsequent rounds.
             for group in best_groups:
                 for i, player_a in enumerate(group):
                     for player_b in group[i + 1:]:
@@ -473,6 +494,7 @@ class Session:
 
         self.round_groups = groups_by_round
         return groups_by_round
+
 
 
     

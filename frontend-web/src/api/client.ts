@@ -128,9 +128,11 @@ export async function submitAnswer(
   ));
 }
 
+
 export async function submitVote(
   sessionId: string,
   voterId: string,
+  groupIndex: number,
   answerOwnerId: string,
 ): Promise<void> {
   await apiResponse(await fetch(
@@ -140,11 +142,13 @@ export async function submitVote(
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         voter_id: voterId,
+        group_index: groupIndex,
         answer_owner_id: answerOwnerId,
       }),
     },
   ));
 }
+
 
 export async function advanceRound(
   sessionId: string,

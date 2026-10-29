@@ -63,6 +63,8 @@ class SessionResponse(BaseModel):
     round_duration_seconds: int | None
     round_deadline: datetime | None
     phase: str
+    scores: dict[str, int] = Field(default_factory=dict)
+    round_results: list[dict] = Field(default_factory=list)
 
 class StartGameRequest(BaseModel):
     game_id: str
@@ -123,4 +125,5 @@ class StartRoundTimerRequest(BaseModel):
 
 class SubmitVoteRequest(BaseModel):
     voter_id: str
+    group_index: int
     answer_owner_id: str

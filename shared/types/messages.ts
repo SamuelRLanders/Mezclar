@@ -74,6 +74,11 @@ export interface SessionResponse {
   round_duration_seconds: number | null;
   round_deadline: string | null;
   phase: string;
+  scores: Record<string, number>;
+  round_results: {
+    round: number;
+    groups: SessionGroup[];
+  }[];
 }
 
 export interface KickPlayerRequest {
