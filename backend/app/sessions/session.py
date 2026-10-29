@@ -143,6 +143,11 @@ class Session:
         if len(answer) > 200:
             raise ValueError("Answer cannot exceed 200 characters.")
 
+        if self.use_profanity_filter:
+            valid = validate_name(answer)
+            if not valid:
+                raise ValueError("Answer contains inappropriate content.")
+
         round_number = self.current_round
 
         if round_number not in self.round_groups:
