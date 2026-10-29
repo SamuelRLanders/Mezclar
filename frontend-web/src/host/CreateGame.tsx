@@ -62,6 +62,7 @@ export default function CreateGame() {
             options,
             ...(selectedGame.id === "quiplash" ? { rounds } : {}),
           },
+          password: password.trim() || null
         }),
       });
 
@@ -76,6 +77,7 @@ export default function CreateGame() {
           sessionId: data.session_id,
           gameId: selectedGame.id,
           options,
+          password: password.trim() || null
         },
       });
 
