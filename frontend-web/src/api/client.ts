@@ -82,7 +82,12 @@ export async function startGame(code: string, request: StartGameRequest): Promis
 }
 
 export function playerSocketUrl(code: string, playerId: string): string {
-  const url = new URL("/ws/session/" + code + "/player/" + playerId, window.location.href);
+  const path = "/ws/session/" + code + "/player/" + playerId;
+  // Vercel can't proxy WebSockets, so in production connect straight to the backend
+  // (VITE_WS_URL, e.g. "wss://api.example.com"). Unset locally, so Vite's /ws proxy is used.
+  const base = import.meta.env.VITE_WS_URL;
+  if (base) return base + path;
+  const url = new URL(path, window.location.href);
   url.protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
   return url.href;
 }
