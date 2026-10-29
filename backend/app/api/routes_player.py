@@ -1,4 +1,3 @@
-from httpx import request
 
 from backend.app.models.schemas import (
     GenerateNameResponse, 
