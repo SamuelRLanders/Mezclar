@@ -18,6 +18,7 @@ class JoinSessionRequest(BaseModel):
 
     player_id: str = Field(min_length=1)
     name: str | None = Field(default=None, min_length=1)
+    password: str | None = Field(default=None, min_length=1)
 
 class JoinSessionResponse(BaseModel):
     player_id: str
@@ -32,7 +33,7 @@ class SessionPlayerResponse(BaseModel):
     name: str
     ready: bool
     hidden: bool
-    is_mod: bool
+is_mod: bool
 
 class SessionGroupResponse(BaseModel):
     group_index: int

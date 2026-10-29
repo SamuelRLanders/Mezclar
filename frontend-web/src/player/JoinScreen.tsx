@@ -49,7 +49,7 @@ export default function JoinScreen() {
 
   const playerId = sessionStorage.getItem("mezclar-player:" + code) ?? crypto.randomUUID();
 
-  joinSession(code, playerId, "")
+  joinSession(code, playerId, "", password)
     .then((result) => {
       sessionStorage.setItem("mezclar-player:" + code, result.player_id);
       setName(result.name);
@@ -94,6 +94,7 @@ export default function JoinScreen() {
           body: JSON.stringify({
             player_id: playerId,
             name: name.trim() || null,
+            password: password.trim() || null,
           }),
         }
       );
@@ -215,7 +216,7 @@ export default function JoinScreen() {
             </button>
           </div>
           {session?.requires_password &&
-          <form className="join__form">
+          <div className="join__form">
             <label className="join__label">
               Room Password
             </label>
@@ -231,7 +232,7 @@ export default function JoinScreen() {
                   autoComplete = "new-password"
                   />
               </div>
-            </form>}
+            </div>}
           {session?.auto_generate_names && <p>Leave blank for a generated name.</p>}
 
           <button

@@ -37,18 +37,27 @@ def submit_name(session_id: str, request: SubmitNameRequest) -> GenerateNameResp
         raise HTTPException(status_code=400, detail=str(e))
     return GenerateNameResponse(name=name)
 
+def validate_password(session, password: str | None) -> None:
+    if session.password is not None and session.password != password:
+        raise HTTPException(
+            status_code=403,
+            detail="Incorrect password for this session.",
+        )
+
 @router.post("/session/{session_id}/join", response_model=JoinSessionResponse)
 def join_session(
     session_id: str,
     request: JoinSessionRequest
 ) -> JoinSessionResponse:
     session = get_session(session_id)
-
     if not session:
         raise HTTPException(
             status_code=404,
             detail="Session not found",
         )
+    if session.password is not None:
+        validate_password(session, request.password)
+
     if session.use_profanity_filter:
         valid = validate_name(request.name)
         if not valid:

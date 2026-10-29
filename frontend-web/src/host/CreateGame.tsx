@@ -25,6 +25,9 @@ export default function CreateGame() {
   const [isCreating, setIsCreating] = useState(false);
   const [error, setError] = useState("");
   const [filters, setFilters] = useState<GameFilters>(emptyFilters);
+  const [password, setPassword] = useState("");
+
+  const passwordRequired = options["requiresPassword"] ?? false;
 
   // Looked up against the full catalog, not the filtered list: filtering is a
   // way to find a game, and must not disturb one that's already chosen.
@@ -41,6 +44,11 @@ export default function CreateGame() {
 
     setIsCreating(true);
     setError("");
+  
+    if (passwordRequired && !password.trim()) {
+      setError("Please enter a password for the game.");
+      return;
+    }
 
     try {
       
@@ -169,6 +177,20 @@ export default function CreateGame() {
                 <span className="option__switch" aria-hidden="true" />
               </label>
             ))}
+            
+            {passwordRequired && (
+              <label className="option option--password">
+                <span className="option__text">Room password</span>
+                <input
+                  type ="text"
+                  value={password}
+                  onChange={(event) => setPassword(event.target.value)}
+                  placeholder="Enter a password"
+                  maxLength={50}
+                  autoComplete = "new-password"
+                  />
+              </label>
+            )}
           </div>
         </section>
 

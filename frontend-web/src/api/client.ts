@@ -53,12 +53,12 @@ export async function getSession(code: string): Promise<SessionResponse> {
 }
 
 export async function joinSession(
-  code: string, playerId: string, name: string,
+  code: string, playerId: string, name: string, password?: string
 ): Promise<JoinSessionResponse> {
   return apiResponse(await fetch("/api/session/" + code + "/join", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ player_id: playerId, name: name.trim() || null }),
+    body: JSON.stringify({ player_id: playerId, name: name.trim() || null, password: password?.trim() || null }),
   }));
 }
 
