@@ -27,6 +27,8 @@ export default function JoinScreen() {
   const storedPlayerId = code ? sessionStorage.getItem("mezclar-player:" + code) : null;
   const isReturningPlayer = !!session && session.players.some((player) => player.player_id === storedPlayerId);
   const lateJoinBlocked = !!session && session.game_started && !session.allow_late_join && !isReturningPlayer;
+  const tooLateToJoin = !!session && session.game_started && session.game_id === "quiplash"
+    && session.current_round >= session.total_rounds && !isReturningPlayer;
 
   useEffect(() => {
     if (!code) return;
@@ -165,6 +167,28 @@ export default function JoinScreen() {
 
             <p className="join__welcome">
               This game has already started and isn't accepting new players.
+            </p>
+          </header>
+
+          <Link className="join__submit join__home" to="/">
+            Back to home
+          </Link>
+        </div>
+      </main>
+    );
+  }
+
+  if (tooLateToJoin) {
+    return (
+      <main className="join">
+        <div className="join__inner">
+          <header className="join__header">
+            <p className="join__eyebrow">Last round</p>
+
+            <h1 className="join__title">{code}</h1>
+
+            <p className="join__welcome">
+              This game is in its last round, so it's too late to join.
             </p>
           </header>
 

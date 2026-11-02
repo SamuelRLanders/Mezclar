@@ -16,6 +16,12 @@ export interface GameStartedMessage {
   game_id: string;
 }
 
+export interface RoundJoinedMessage {
+  type: "round_joined";
+  session_id: string;
+  current_round: number;
+}
+
 interface ConnectedMessage {
   type: "connected";
   session_id: string;
@@ -35,16 +41,18 @@ interface PlayerSocketOptions {
   initialName?: string;
   initialGameId?: string;
   onGameStarted?: (message: GameStartedMessage, playerName: string) => void;
+  onRoundJoined?: (message: RoundJoinedMessage, playerName: string) => void;
 }
 
 /**
  * Opens the player's websocket for a session and tracks the lobby state it
- * reports. Kicks are handled here; each page decides what game_started means.
+ * reports. Kicks are handled here; each page decides what game_started and
+ * round_joined mean.
  */
 export function usePlayerSocket(
   sessionId: string | undefined,
   playerId: string | null,
-  { initialName, initialGameId, onGameStarted }: PlayerSocketOptions = {},
+  { initialName, initialGameId, onGameStarted, onRoundJoined }: PlayerSocketOptions = {},
 ) {
   const navigate = useNavigate();
 
@@ -59,8 +67,10 @@ export function usePlayerSocket(
 
   // Kept in a ref so a new callback on each render doesn't reopen the socket.
   const onGameStartedRef = useRef(onGameStarted);
+  const onRoundJoinedRef = useRef(onRoundJoined);
   useEffect(() => {
     onGameStartedRef.current = onGameStarted;
+    onRoundJoinedRef.current = onRoundJoined;
   });
 
   useEffect(() => {
@@ -110,6 +120,12 @@ export function usePlayerSocket(
         if (message.type === "game_started") {
           onGameStartedRef.current?.(
             message as GameStartedMessage,
+            connectedName
+          );
+        }
+        if (message.type === "round_joined") {
+          onRoundJoinedRef.current?.(
+            message as RoundJoinedMessage,
             connectedName
           );
         }

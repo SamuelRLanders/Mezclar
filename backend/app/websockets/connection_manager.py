@@ -24,10 +24,15 @@ class ConnectionManager:
         self,
         session_id: str,
         player_id: str,
+        websocket: WebSocket | None = None,
     ) -> None:
         session_connections = self.active_connections.get(session_id)
 
         if not session_connections:
+            return
+
+        # A newer socket may have replaced this one; leave it alone.
+        if websocket is not None and session_connections.get(player_id) is not websocket:
             return
 
         session_connections.pop(player_id, None)

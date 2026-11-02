@@ -39,6 +39,9 @@ class Session:
         self.current_prompt: str | None = None
         self.answers: dict[str, str] = {}
 
+        # Players who joined mid-game and are waiting for the next round to start.
+        self.waiting_players: list[str] = []
+
         # Subgroup assignments for each submission round.
         # Round number -> list of groups -> player IDs.
         self.round_groups: dict[int, list[list[str]]] = {}
@@ -108,6 +111,8 @@ class Session:
         if player_id in self.players:
             player = self.players.pop(player_id)
             self.remove_used_name(player.name)
+        if player_id in self.waiting_players:
+            self.waiting_players.remove(player_id)
 
     def get_player(self, player_id: str) -> Player | None:
         return self.players.get(player_id)
@@ -125,6 +130,45 @@ class Session:
                 return group_index
 
         raise ValueError("Player is not assigned to a group in this round.")
+
+    def is_last_round(self) -> bool:
+        """Return whether a Quiplash game is in (or past) its final round."""
+        return (
+            self.game_started
+            and self.game_id == "quiplash"
+            and self.current_round >= self.total_rounds
+        )
+
+    def is_player_in_current_round(self, player_id: str) -> bool:
+        groups = self.round_groups.get(self.current_round, [])
+        return any(player_id in group for group in groups)
+
+    def add_late_player(self, player_id: str, requested_name: str | None = None) -> Player:
+        """Add a player mid-game; Quiplash players wait until the next round starts."""
+        player = self.add_player(player_id, requested_name)
+        if self.game_id == "quiplash":
+            self.waiting_players.append(player_id)
+        return player
+
+    def insert_waiting_players(self) -> list[str]:
+        """Place waiting players into the current and remaining rounds' groups."""
+        inserted = list(self.waiting_players)
+
+        for player_id in inserted:
+            for round_number in range(self.current_round, self.total_rounds + 1):
+                groups = self.round_groups.get(round_number)
+                if not groups:
+                    continue
+
+                # Join the smallest group so group sizes stay balanced.
+                smallest = min(len(group) for group in groups)
+                candidates = [group for group in groups if len(group) == smallest]
+                random.choice(candidates).append(player_id)
+
+            self.scores.setdefault(player_id, 0)
+
+        self.waiting_players.clear()
+        return inserted
 
         
     def submit_answer(self, player_id: str, answer: str) -> None:
@@ -374,7 +418,7 @@ class Session:
     #     self.answers.clear()
 
     
-    def advance_round(self) -> None:
+    def advance_round(self) -> list[str]:
         if not self.game_started:
             raise ValueError("The game has not started.")
 
@@ -385,7 +429,7 @@ class Session:
 
         if next_round > self.total_rounds:
             self.phase = "finished"
-            return
+            return []
 
         if next_round not in self.group_prompts:
             raise ValueError("Prompts have not been assigned for the next round.")
@@ -398,6 +442,8 @@ class Session:
 
         # Do not clear group_answers: previous rounds' answers must remain available.
         self.answers.clear()
+
+        return self.insert_waiting_players()
 
 
     def mod_player(self, player_id: str, is_mod: bool) -> Player:

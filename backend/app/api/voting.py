@@ -39,10 +39,14 @@ async def start_voting(session, round_number: int) -> None:
     
     # Send each player the answers from every OTHER group.
     for player_id in session.players:
-        voter_group_index = session.get_player_group_index(
-            round_number,
-            player_id,
-        )
+        try:
+            voter_group_index = session.get_player_group_index(
+                round_number,
+                player_id,
+            )
+        except ValueError:
+            # Late joiners waiting for the next round aren't in a group yet.
+            continue
 
         voting_options_by_group = []
 

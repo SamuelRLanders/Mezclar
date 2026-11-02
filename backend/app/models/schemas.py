@@ -33,7 +33,7 @@ class SessionPlayerResponse(BaseModel):
     name: str
     ready: bool
     hidden: bool
-is_mod: bool
+    is_mod: bool
 
 class SessionGroupResponse(BaseModel):
     group_index: int
@@ -57,6 +57,7 @@ class SessionResponse(BaseModel):
     minimum_players: int | None
     maximum_players: int | None
     current_round: int
+    total_rounds: int
     current_prompt: str | None
     answers: dict[str, str]
     groups: list[SessionGroupResponse] = Field(default_factory=list)

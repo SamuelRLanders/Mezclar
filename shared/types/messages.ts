@@ -68,6 +68,7 @@ export interface SessionResponse {
   minimum_players: number | null;
   maximum_players: number | null;
   current_round: number;
+  total_rounds: number;
   current_prompt: string;
   answers: Record<string, string>;
   groups: SessionGroup[];

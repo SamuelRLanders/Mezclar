@@ -85,11 +85,23 @@ def join_session(
             detail="This game is already in progress and isn't accepting new players.",
         )
 
-    try:
-        player = session.add_player(
-            player_id=request.player_id,
-            requested_name=request.name,
+    if session.is_last_round():
+        raise HTTPException(
+            status_code=403,
+            detail="This game is in its last round, so it's too late to join.",
         )
+
+    try:
+        if session.game_started:
+            player = session.add_late_player(
+                player_id=request.player_id,
+                requested_name=request.name,
+            )
+        else:
+            player = session.add_player(
+                player_id=request.player_id,
+                requested_name=request.name,
+            )
     except ValueError as error:
         raise HTTPException(
             status_code=400,

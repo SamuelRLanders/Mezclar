@@ -71,6 +71,13 @@ async def handle_join(
             "game_id": session.game_id,
         })
 
+        if session.is_player_in_current_round(player_id):
+            await websocket.send_json({
+                "type": "round_joined",
+                "session_id": session.session_id,
+                "current_round": session.current_round,
+            })
+
     await send_player_prompt(session, player_id)
 
     try:
@@ -81,6 +88,7 @@ async def handle_join(
         connection_manager.disconnect(
             session_id=session.session_id,
             player_id=player_id,
+            websocket=websocket,
         )
 
 
