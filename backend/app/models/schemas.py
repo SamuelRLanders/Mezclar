@@ -19,6 +19,7 @@ class JoinSessionRequest(BaseModel):
     player_id: str = Field(min_length=1)
     name: str | None = Field(default=None, min_length=1)
     password: str | None = Field(default=None, min_length=1)
+    device_token: str | None = Field(default=None, min_length=1, max_length=64)
 
 class JoinSessionResponse(BaseModel):
     player_id: str

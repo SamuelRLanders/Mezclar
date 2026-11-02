@@ -76,6 +76,10 @@ class Session:
         # Players whose disconnect was logged, so their reconnect can be logged too.
         self.disconnected_players: set[str] = set()
 
+        # Kicked players are banned by device token and by player ID; checked on every join.
+        self.banned_tokens: set[str] = set()
+        self.banned_player_ids: set[str] = set()
+
     def log_event(self, event_type: str, message: str, player: Player | None = None) -> None:
         """Record something the host should see in the game log."""
         self.event_log.append({
@@ -122,11 +126,16 @@ class Session:
 
         raise ValueError("Name must be provided or auto-generation must be enabled.")
 
-    def add_player(self, player_id: str, requested_name: str | None = None) -> Player:
+    def add_player(self, player_id: str, requested_name: str | None = None, device_token: str | None = None) -> Player:
         name = self.assign_name(requested_name)
-        player = Player(player_id, name)
+        player = Player(player_id, name, device_token)
         self.players[player_id] = player
         return player
+
+    def is_banned(self, player_id: str, device_token: str | None) -> bool:
+        return player_id in self.banned_player_ids or (
+            device_token is not None and device_token in self.banned_tokens
+        )
 
     def remove_player(self, player_id: str) -> None:
         if player_id in self.players:
@@ -165,9 +174,9 @@ class Session:
         groups = self.round_groups.get(self.current_round, [])
         return any(player_id in group for group in groups)
 
-    def add_late_player(self, player_id: str, requested_name: str | None = None) -> Player:
+    def add_late_player(self, player_id: str, requested_name: str | None = None, device_token: str | None = None) -> Player:
         """Add a player mid-game; Quiplash players wait until the next round starts."""
-        player = self.add_player(player_id, requested_name)
+        player = self.add_player(player_id, requested_name, device_token)
         if self.game_id == "quiplash":
             self.waiting_players.append(player_id)
         return player
@@ -272,6 +281,10 @@ class Session:
 
         if voter_id not in self.players:
             raise ValueError("Voter is not in this session.")
+
+        # Votes for a kicked player's answer are dropped quietly; nobody gets the point.
+        if answer_owner_id in self.banned_player_ids:
+            return
 
         if answer_owner_id not in self.players:
             raise ValueError("Answer owner is not in this session.")
@@ -449,7 +462,25 @@ class Session:
         if player is None:
             raise ValueError(f"Player with ID {player_id} does not exist.")
         self.log_event("player_kicked", "was kicked", player)
+        self.banned_player_ids.add(player_id)
+        if player.device_token is not None:
+            self.banned_tokens.add(player.device_token)
+        self.remove_player_from_rounds(player_id)
         self.remove_player(player.player_id)
+
+    def remove_player_from_rounds(self, player_id: str) -> None:
+        """Drop a player from the current and upcoming rounds so nobody waits on them."""
+        for round_number, groups in self.round_groups.items():
+            # Past rounds stay intact for the results history.
+            if round_number < self.current_round:
+                continue
+            for group in groups:
+                if player_id in group:
+                    group.remove(player_id)
+
+        # Their current-round answer shouldn't be voted on after they're gone.
+        for group_answers in self.group_answers.get(self.current_round, {}).values():
+            group_answers.pop(player_id, None)
 
     def hide_player(self, player_id: str, hidden: bool = True) -> Player:
         player = self.get_player(player_id)

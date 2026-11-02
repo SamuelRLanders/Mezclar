@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import mezclarLogo from "../assets/mezclar-logo.png";
 import "./LandingPage.css";
 
@@ -17,8 +17,18 @@ function sanitizeCode(raw: string): string {
 
 export default function LandingPage() {
   const navigate = useNavigate();
+  const location = useLocation();
   const [code, setCode] = useState("");
   const [error, setError] = useState("");
+  // Set when a player is sent here after being kicked or removed.
+  const [notice, setNotice] = useState<string>(
+    (location.state as { notice?: string } | null)?.notice ?? "",
+  );
+
+  // Clear it from history so a refresh doesn't show it again.
+  useEffect(() => {
+    if (location.state) navigate(location.pathname, { replace: true, state: null });
+  }, [location, navigate]);
 
   const isComplete = code.length === JOIN_CODE_LENGTH;
 
@@ -40,6 +50,15 @@ export default function LandingPage() {
             Get a room talking. Enter your game code to jump in.
           </p>
         </header>
+
+        {notice && (
+          <div className="landing__notice" role="alert">
+            <span>{notice}</span>
+            <button type="button" aria-label="Dismiss" onClick={() => setNotice("")}>
+              ×
+            </button>
+          </div>
+        )}
 
         <form className="landing__join" onSubmit={handleSubmit}>
           <input
