@@ -50,6 +50,14 @@ class SessionEventResponse(BaseModel):
     player_name: str | None
     message: str
 
+class LeaderboardEntryResponse(BaseModel):
+    player_id: str
+    name: str
+    hidden: bool
+    score: int
+    rank: int
+    waiting: bool
+
 class SessionResponse(BaseModel):
     session_id: str
     player_count: int
@@ -75,6 +83,7 @@ class SessionResponse(BaseModel):
     scores: dict[str, int] = Field(default_factory=dict)
     round_results: list[dict] = Field(default_factory=list)
     event_log: list[SessionEventResponse] = Field(default_factory=list)
+    leaderboard: list[LeaderboardEntryResponse] = Field(default_factory=list)
 
 class StartGameRequest(BaseModel):
     game_id: str
