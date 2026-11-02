@@ -59,6 +59,15 @@ export interface SessionEvent {
   message: string;
 }
 
+export interface LeaderboardEntry {
+  player_id: string;
+  name: string;
+  hidden: boolean;
+  score: number;
+  rank: number;
+  waiting: boolean;
+}
+
 export interface SessionResponse {
   session_id: string;
   host_name: string;
@@ -90,6 +99,7 @@ export interface SessionResponse {
     groups: SessionGroup[];
   }[];
   event_log: SessionEvent[];
+  leaderboard: LeaderboardEntry[];
 }
 
 export interface KickPlayerRequest {

@@ -139,9 +139,55 @@ export default function HostGameView() {
 
   const isFinished = session?.phase === "finished";
 
-  const sortedStandings = Object.entries(session?.scores ?? {}).sort(
-    ([, scoreA], [, scoreB]) => scoreB - scoreA,
-  );
+  function renderStandings(isFinal: boolean) {
+    if (!session || session.leaderboard.length === 0) {
+      return <p className="host-game__empty">No players yet.</p>;
+    }
+
+    return (
+      <div className="host-game__standings">
+        {session.leaderboard.map((entry) => {
+          // Nobody leads while everyone is still on zero.
+          const isLeader = entry.rank === 1 && entry.score > 0;
+          const name = entry.hidden ? "Hidden player" : entry.name;
+
+          return (
+            <div
+              key={entry.player_id}
+              className={`host-game__standing ${
+                isLeader ? "host-game__standing--first" : ""
+              }`}
+            >
+              <span className="host-game__standing-place">
+                {String(entry.rank).padStart(2, "0")}
+              </span>
+
+              <span className="host-game__avatar">
+                {name.charAt(0).toUpperCase()}
+              </span>
+
+              <strong className="host-game__standing-name">
+                {name}
+                {isLeader && (
+                  <span className="host-game__winner">
+                    {isFinal ? "WINNER" : "LEADING"}
+                  </span>
+                )}
+                {entry.waiting && (
+                  <span className="host-game__waiting">WAITING</span>
+                )}
+              </strong>
+
+              <span className="host-game__score">
+                {entry.score}
+                <small>pts</small>
+              </span>
+            </div>
+          );
+        })}
+      </div>
+    );
+  }
 
   // Names come from the live roster so hiding a player also hides old entries.
   function logPlayerName(event: SessionEvent) {
@@ -283,60 +329,11 @@ export default function HostGameView() {
                     </div>
 
                     <span className="host-game__count">
-                      {sortedStandings.length} PLAYERS
+                      {session.leaderboard.length} PLAYERS
                     </span>
                   </div>
 
-                  {sortedStandings.length > 0 ? (
-                    <div className="host-game__standings">
-                      {sortedStandings.map(([playerId, score], index) => {
-                        const player = session.players.find(
-                          (candidate) => candidate.player_id === playerId,
-                        );
-
-                        return (
-                          <div
-                            key={playerId}
-                            className={`host-game__standing ${
-                              index === 0
-                                ? "host-game__standing--first"
-                                : ""
-                            }`}
-                          >
-                            <span className="host-game__standing-place">
-                              {String(index + 1).padStart(2, "0")}
-                            </span>
-
-                            <span className="host-game__avatar">
-                              {(player?.name ?? "?")
-                                .charAt(0)
-                                .toUpperCase()}
-                            </span>
-
-                            <strong className="host-game__standing-name">
-                              {player?.hidden
-                                ? "Hidden player"
-                                : player?.name ?? "Player"}
-                              {index === 0 && (
-                                <span className="host-game__winner">
-                                  WINNER
-                                </span>
-                              )}
-                            </strong>
-
-                            <span className="host-game__score">
-                              {score}
-                              <small>pts</small>
-                            </span>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  ) : (
-                    <p className="host-game__empty">
-                      No final scores available.
-                    </p>
-                  )}
+                  {renderStandings(true)}
                 </section>
 
                 <section className="host-game__panel">
@@ -647,6 +644,23 @@ export default function HostGameView() {
                       </button>
                     </div>
                   </div>
+                </section>
+
+                <section className="host-game__panel">
+                  <div className="host-game__section-heading">
+                    <div>
+                      <span className="host-game__eyebrow">
+                        LIVE STANDINGS
+                      </span>
+                      <h2>Leaderboard</h2>
+                    </div>
+
+                    <span className="host-game__count">
+                      {session.leaderboard.length} PLAYERS
+                    </span>
+                  </div>
+
+                  {renderStandings(false)}
                 </section>
               </>
             )}

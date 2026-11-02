@@ -197,6 +197,34 @@ class Session:
         self.waiting_players.clear()
         return inserted
 
+    def get_leaderboard(self) -> list[dict]:
+        """Rank current players by score; ties share a rank and keep join order."""
+        ordered = sorted(
+            self.players.values(),
+            key=lambda player: -self.scores.get(player.player_id, 0),
+        )
+
+        leaderboard = []
+        rank = 0
+        previous_score = None
+
+        for position, player in enumerate(ordered, start=1):
+            score = self.scores.get(player.player_id, 0)
+            if score != previous_score:
+                rank = position
+                previous_score = score
+
+            leaderboard.append({
+                "player_id": player.player_id,
+                "name": player.name,
+                "hidden": player.hidden,
+                "score": score,
+                "rank": rank,
+                "waiting": player.player_id in self.waiting_players,
+            })
+
+        return leaderboard
+
         
     def submit_answer(self, player_id: str, answer: str) -> None:
         if not self.game_started:

@@ -162,6 +162,7 @@ def get_session_info(session_id: SessionCode) -> SessionResponse:
         groups=groups, phase=session.phase,
         scores=session.scores, round_results=round_results,
         event_log=session.event_log,
+        leaderboard=session.get_leaderboard(),
     )
 
 @router.post("/session/{session_id}/start")
