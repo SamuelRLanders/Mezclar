@@ -1,6 +1,6 @@
 
 import { useEffect, useState } from "react";
-import { Link, useLocation } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import {
   getSession,
   playerSocketUrl,
@@ -23,6 +23,7 @@ export default function GameLanding() {
   };
 
   const { playerId, sessionId } = state || {};
+  const navigate = useNavigate();
 
   const [session, setSession] = useState<SessionResponse | null>(null);
   const [playerPrompt, setPlayerPrompt] = useState<{
@@ -80,9 +81,24 @@ export default function GameLanding() {
 
     const websocket = new WebSocket(playerSocketUrl(sessionId, playerId));
 
+    const leaveGame = () => {
+      websocket.onclose = null;
+      websocket.close();
+      sessionStorage.removeItem("mezclar-player:" + sessionId);
+      navigate("/", {
+        replace: true,
+        state: { notice: "You have been kicked from the session." },
+      });
+    };
+
     websocket.onmessage = (event) => {
       try {
         const message = JSON.parse(event.data);
+
+        if (message.type === "kicked") {
+          leaveGame();
+          return;
+        }
 
         if (message.type === "player_prompt") {
           setPlayerPrompt({
@@ -154,10 +170,15 @@ export default function GameLanding() {
       console.error("Game updates WebSocket error:", event);
     };
 
+    websocket.onclose = (event) => {
+      if (event.code === 4403) leaveGame();
+    };
+
     return () => {
+      websocket.onclose = null;
       websocket.close();
     };
-  }, [sessionId, playerId]);
+  }, [sessionId, playerId, navigate]);
 
   useEffect(() => {
     const deadline = session?.round_deadline;

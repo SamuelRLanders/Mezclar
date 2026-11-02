@@ -24,7 +24,7 @@ export async function regenerateName(sessionId: string, player_id: string): Prom
   return data.name;
 }
 
-export type { SessionEvent, SessionPlayer, SessionResponse } from "../../../shared/types/messages";
+export type { LeaderboardEntry, SessionEvent, SessionPlayer, SessionResponse } from "../../../shared/types/messages";
 
 async function apiResponse<T>(response: Response): Promise<T> {
   const data = await response.json();
@@ -52,13 +52,30 @@ export async function getSession(code: string): Promise<SessionResponse> {
   return apiResponse(await fetch("/api/session/" + code));
 }
 
+const DEVICE_TOKEN_KEY = "mezclar-device";
+
+// One token per browser, kept across tabs and visits so a kick sticks to the device.
+export function getDeviceToken(): string {
+  let token = localStorage.getItem(DEVICE_TOKEN_KEY);
+  if (!token) {
+    token = crypto.randomUUID();
+    localStorage.setItem(DEVICE_TOKEN_KEY, token);
+  }
+  return token;
+}
+
 export async function joinSession(
   code: string, playerId: string, name: string, password?: string
 ): Promise<JoinSessionResponse> {
   return apiResponse(await fetch("/api/session/" + code + "/join", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ player_id: playerId, name: name.trim() || null, password: password?.trim() || null }),
+    body: JSON.stringify({
+      player_id: playerId,
+      name: name.trim() || null,
+      password: password?.trim() || null,
+      device_token: getDeviceToken(),
+    }),
   }));
 }
 

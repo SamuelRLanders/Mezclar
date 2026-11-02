@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import "./JoinScreen.css";
-import { getSession, type SessionResponse, joinSession, regenerateName } from "../api/client";
+import { getDeviceToken, getSession, type SessionResponse, joinSession, regenerateName } from "../api/client";
 
 interface JoinSessionResponse {
   player_id: string;
@@ -97,6 +97,7 @@ export default function JoinScreen() {
             player_id: playerId,
             name: name.trim() || null,
             password: password.trim() || null,
+            device_token: getDeviceToken(),
           }),
         }
       );

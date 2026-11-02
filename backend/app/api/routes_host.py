@@ -16,7 +16,7 @@ from backend.app.api import SessionCode
 import asyncio
 from datetime import datetime, timedelta, timezone
 
-from backend.app.api.voting import start_voting
+from backend.app.api.voting import resume_round_after_kick, start_voting
 
 from backend.app.websockets.connection_manager import (
     connection_manager,
@@ -225,6 +225,9 @@ async def kick_player(session_id: str, request: KickPlayerRequest) -> dict:
             detail="Session not found",
         )
 
+    # Checked before the kick, which removes the player from the round's groups.
+    was_in_round = session.is_player_in_current_round(request.player_id)
+
     try:
         session.kick_player(request.player_id)
     except ValueError as error:
@@ -239,6 +242,9 @@ async def kick_player(session_id: str, request: KickPlayerRequest) -> dict:
     )
     await connection_manager.disconnect_player(session_id, request.player_id)
     await broadcast_roster(session)
+
+    if was_in_round and session.game_id == "quiplash":
+        await resume_round_after_kick(session)
 
     return { "session_id": session.session_id }
 

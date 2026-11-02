@@ -55,6 +55,11 @@ def join_session(
             status_code=404,
             detail="Session not found",
         )
+    if session.is_banned(request.player_id, request.device_token):
+        raise HTTPException(
+            status_code=403,
+            detail="You were removed from this session and can't rejoin it.",
+        )
     if session.password is not None:
         validate_password(session, request.password)
 
@@ -99,6 +104,7 @@ def join_session(
             player = session.add_late_player(
                 player_id=request.player_id,
                 requested_name=requested_name,
+                device_token=request.device_token,
             )
             session.log_event(
                 "player_joined_late",
@@ -110,6 +116,7 @@ def join_session(
             player = session.add_player(
                 player_id=request.player_id,
                 requested_name=requested_name,
+                device_token=request.device_token,
             )
             session.log_event("player_joined", "joined the lobby", player)
     except ValueError as error:

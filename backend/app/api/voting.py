@@ -32,14 +32,16 @@ async def start_voting(session, round_number: int) -> None:
             session.round_timer_task.cancel()
         session.round_timer_task = None
 
+    await send_voting_options(session, round_number, list(session.players))
+
+
+async def send_voting_options(session, round_number: int, player_ids: list[str]) -> None:
+    """Send each player the answers from every OTHER group."""
     groups = session.round_groups.get(round_number, [])
     round_answers = session.group_answers.get(round_number, {})
     prompts = session.group_prompts.get(round_number, {})
 
-    
-    
-    # Send each player the answers from every OTHER group.
-    for player_id in session.players:
+    for player_id in player_ids:
         try:
             voter_group_index = session.get_player_group_index(
                 round_number,
@@ -52,10 +54,11 @@ async def start_voting(session, round_number: int) -> None:
         voting_options_by_group = []
 
         for group_index, group in enumerate(groups):
-            if group_index == voter_group_index:
-                continue
-
             answers = round_answers.get(group_index, {})
+
+            # Kicks can leave a group with nothing to vote on.
+            if group_index == voter_group_index or not answers:
+                continue
 
             voting_options_by_group.append(
                 {
@@ -83,4 +86,25 @@ async def start_voting(session, round_number: int) -> None:
             },
         )
 
+
+async def resume_round_after_kick(session) -> None:
+    """Keep a Quiplash round moving once a kicked player is out of it."""
+    round_number = session.current_round
+
+    if session.phase == "answering" and session.all_players_submitted(round_number):
+        # The kicked player was the only one everyone was still waiting on.
+        await start_voting(session, round_number)
+
+    elif session.phase == "voting":
+        # Re-send ballots without the kicked answer to anyone who hasn't voted yet.
+        voted = {
+            voter_id
+            for votes in session.group_votes.get(round_number, {}).values()
+            for voter_id in votes
+        }
+        await send_voting_options(
+            session,
+            round_number,
+            [player_id for player_id in session.players if player_id not in voted],
+        )
 

@@ -3,6 +3,8 @@ import { Link, useParams } from "react-router-dom";
 import {
   advanceRound,
   getSession,
+  kickPlayer,
+  type LeaderboardEntry,
   type SessionEvent,
   type SessionResponse,
   startRoundTimer,
@@ -22,6 +24,8 @@ export default function HostGameView() {
   const [timerDuration, setTimerDuration] = useState(60);
   const [isStartingTimer, setIsStartingTimer] = useState(false);
   const [timerError, setTimerError] = useState("");
+
+  const [kickError, setKickError] = useState("");
 
   const [secondsRemaining, setSecondsRemaining] = useState<number | null>(
     null,
@@ -113,6 +117,30 @@ export default function HostGameView() {
     }
   }
 
+  async function handleKick(entry: LeaderboardEntry) {
+    if (!code) {
+      return;
+    }
+
+    const name = entry.hidden ? "Hidden player" : entry.name;
+    if (!window.confirm(`Kick ${name}? They won't be able to rejoin this game.`)) {
+      return;
+    }
+
+    setKickError("");
+
+    try {
+      await kickPlayer(code, { player_id: entry.player_id });
+      setSession(await getSession(code));
+    } catch (error) {
+      setKickError(
+        error instanceof Error
+          ? error.message
+          : "Could not kick that player.",
+      );
+    }
+  }
+
   useEffect(() => {
     const deadline = session?.round_deadline;
 
@@ -182,6 +210,16 @@ export default function HostGameView() {
                 {entry.score}
                 <small>pts</small>
               </span>
+
+              {!isFinal && (
+                <button
+                  type="button"
+                  className="host-game__kick"
+                  onClick={() => handleKick(entry)}
+                >
+                  Kick
+                </button>
+              )}
             </div>
           );
         })}
@@ -659,6 +697,12 @@ export default function HostGameView() {
                       {session.leaderboard.length} PLAYERS
                     </span>
                   </div>
+
+                  {kickError && (
+                    <p className="host-game__error" role="alert">
+                      {kickError}
+                    </p>
+                  )}
 
                   {renderStandings(false)}
                 </section>
