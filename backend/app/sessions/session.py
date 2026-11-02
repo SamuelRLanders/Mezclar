@@ -12,6 +12,8 @@ from backend.app.naming.generator import generate_unique_name, validate_name
 from backend.app.sessions.player import Player
 from backend.app.games.quiplash.prompts import QUIPLASH_PROMPTS
 
+MAX_EVENT_LOG = 100
+
 class Session:
     def __init__(self, session_id: str, host_name: str = "Host", settings: dict[str, JsonValue] | None = None, password: str | None = None):
         self.session_id = session_id
@@ -67,6 +69,25 @@ class Session:
 
         self.phase: str = "lobby"
 
+        # Recent events shown in the host's game log.
+        self.event_log: list[dict] = []
+        self._next_event_id: int = 1
+
+        # Players whose disconnect was logged, so their reconnect can be logged too.
+        self.disconnected_players: set[str] = set()
+
+    def log_event(self, event_type: str, message: str, player: Player | None = None) -> None:
+        """Record something the host should see in the game log."""
+        self.event_log.append({
+            "id": self._next_event_id,
+            "timestamp": datetime.now(timezone.utc),
+            "type": event_type,
+            "player_id": player.player_id if player else None,
+            "player_name": player.name if player else None,
+            "message": message,
+        })
+        self._next_event_id += 1
+        del self.event_log[:-MAX_EVENT_LOG]
 
     def set_auto_generate(self, enabled: bool) -> None:
         self.auto_generate_names = enabled
@@ -113,6 +134,7 @@ class Session:
             self.remove_used_name(player.name)
         if player_id in self.waiting_players:
             self.waiting_players.remove(player_id)
+        self.disconnected_players.discard(player_id)
 
     def get_player(self, player_id: str) -> Player | None:
         return self.players.get(player_id)
@@ -166,6 +188,11 @@ class Session:
                 random.choice(candidates).append(player_id)
 
             self.scores.setdefault(player_id, 0)
+            self.log_event(
+                "player_inserted",
+                f"jumped in at round {self.current_round}",
+                self.players[player_id],
+            )
 
         self.waiting_players.clear()
         return inserted
@@ -369,6 +396,7 @@ class Session:
 
         self.game_started = True
         self.phase = "answering"
+        self.log_event("game_started", "The game started.")
 
 
     def regenerate_name(self, player_id: str) -> str: 
@@ -392,6 +420,7 @@ class Session:
         player = self.get_player(player_id)
         if player is None:
             raise ValueError(f"Player with ID {player_id} does not exist.")
+        self.log_event("player_kicked", "was kicked", player)
         self.remove_player(player.player_id)
 
     def hide_player(self, player_id: str, hidden: bool = True) -> Player:
@@ -428,6 +457,9 @@ class Session:
         next_round = self.current_round + 1
 
         if next_round > self.total_rounds:
+            # Pressing advance again after the end shouldn't log a second finish.
+            if self.phase != "finished":
+                self.log_event("game_finished", "The game finished.")
             self.phase = "finished"
             return []
 
@@ -436,6 +468,7 @@ class Session:
 
         self.current_round = next_round
         self.phase = "answering"
+        self.log_event("round_started", f"Round {next_round} started.")
 
         # Keep a default prompt temporarily for compatibility with existing routes.
         self.current_prompt = next(iter(self.group_prompts[next_round].values()))

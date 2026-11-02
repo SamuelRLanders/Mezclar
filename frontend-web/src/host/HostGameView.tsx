@@ -3,6 +3,7 @@ import { Link, useParams } from "react-router-dom";
 import {
   advanceRound,
   getSession,
+  type SessionEvent,
   type SessionResponse,
   startRoundTimer,
 } from "../api/client";
@@ -141,6 +142,23 @@ export default function HostGameView() {
   const sortedStandings = Object.entries(session?.scores ?? {}).sort(
     ([, scoreA], [, scoreB]) => scoreB - scoreA,
   );
+
+  // Names come from the live roster so hiding a player also hides old entries.
+  function logPlayerName(event: SessionEvent) {
+    const player = session?.players.find(
+      (candidate) => candidate.player_id === event.player_id,
+    );
+    if (player) return player.hidden ? "Hidden player" : player.name;
+    return event.player_name ?? "A player";
+  }
+
+  function formatLogTime(timestamp: string) {
+    return new Date(timestamp).toLocaleTimeString([], {
+      hour: "numeric",
+      minute: "2-digit",
+      second: "2-digit",
+    });
+  }
 
   return (
     <main className="host-game">
@@ -632,6 +650,42 @@ export default function HostGameView() {
                 </section>
               </>
             )}
+
+            <section className="host-game__panel">
+              <div className="host-game__section-heading">
+                <div>
+                  <span className="host-game__eyebrow">ACTIVITY</span>
+                  <h2>Game log</h2>
+                </div>
+
+                <span className="host-game__count">
+                  {session.event_log.length} EVENTS
+                </span>
+              </div>
+
+              {session.event_log.length > 0 ? (
+                <ol className="host-game__log">
+                  {[...session.event_log].reverse().map((event) => (
+                    <li
+                      key={event.id}
+                      className={`host-game__log-entry host-game__log-entry--${event.type}`}
+                    >
+                      <time dateTime={event.timestamp}>
+                        {formatLogTime(event.timestamp)}
+                      </time>
+                      <span>
+                        {event.player_id && (
+                          <strong>{logPlayerName(event)} </strong>
+                        )}
+                        {event.message}
+                      </span>
+                    </li>
+                  ))}
+                </ol>
+              ) : (
+                <p className="host-game__empty">Nothing has happened yet.</p>
+              )}
+            </section>
           </>
         )}
 

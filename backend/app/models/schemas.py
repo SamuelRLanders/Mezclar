@@ -42,6 +42,14 @@ class SessionGroupResponse(BaseModel):
     answers: dict[str, str]
     vote_counts: dict[str, int] = Field(default_factory=dict)
 
+class SessionEventResponse(BaseModel):
+    id: int
+    timestamp: datetime
+    type: str
+    player_id: str | None
+    player_name: str | None
+    message: str
+
 class SessionResponse(BaseModel):
     session_id: str
     player_count: int
@@ -66,6 +74,7 @@ class SessionResponse(BaseModel):
     phase: str
     scores: dict[str, int] = Field(default_factory=dict)
     round_results: list[dict] = Field(default_factory=list)
+    event_log: list[SessionEventResponse] = Field(default_factory=list)
 
 class StartGameRequest(BaseModel):
     game_id: str

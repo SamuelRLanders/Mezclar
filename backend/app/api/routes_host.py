@@ -160,7 +160,8 @@ def get_session_info(session_id: SessionCode) -> SessionResponse:
         current_prompt=session.current_prompt, answers=session.answers,
         round_duration_seconds=session.round_duration_seconds, round_deadline=session.round_deadline,
         groups=groups, phase=session.phase,
-        scores=session.scores, round_results=round_results
+        scores=session.scores, round_results=round_results,
+        event_log=session.event_log,
     )
 
 @router.post("/session/{session_id}/start")

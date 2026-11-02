@@ -203,3 +203,35 @@ def test_disconnect_ignores_replaced_socket():
 
     connection_manager.disconnect("abc123", "p1", websocket=new_socket)
     assert "abc123" not in connection_manager.active_connections
+
+
+# --- Auto-generated names are enforced on join ---
+
+def test_late_joiner_gets_generated_name_when_auto_names_on(client):
+    code = client.post("/session", json={"settings": {
+        "options": {"allowLateJoin": True, "autoGenerateNames": True},
+    }}).json()["session_id"]
+    for player_id in ["p1", "p2"]:
+        client.post("/session/" + code + "/join", json={"player_id": player_id})
+    client.post("/session/" + code + "/start", json={
+        "game_id": "quiplash", "minimum_players": 2, "maximum_players": 10,
+    })
+
+    with patch("backend.app.sessions.session.generate_unique_name", return_value="Generated Late"):
+        response = join_late(client, code)
+    assert response.status_code == 200
+    assert response.json()["name"] == "Generated Late"
+
+def test_lobby_joiner_gets_generated_name_when_auto_names_on(client):
+    code = client.post("/session", json={"settings": {
+        "options": {"autoGenerateNames": True},
+    }}).json()["session_id"]
+
+    with patch("backend.app.sessions.session.generate_unique_name", return_value="Generated Lobby"):
+        response = client.post("/session/" + code + "/join", json={"player_id": "p1", "name": "Chosen"})
+    assert response.json()["name"] == "Generated Lobby"
+
+def test_chosen_name_used_when_auto_names_off(client):
+    code = client.post("/session").json()["session_id"]
+    response = client.post("/session/" + code + "/join", json={"player_id": "p1", "name": "Chosen"})
+    assert response.json()["name"] == "Chosen"

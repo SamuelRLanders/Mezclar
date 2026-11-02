@@ -226,18 +226,26 @@ export default function JoinScreen() {
               type="text"
               value={name}
               onChange={(event) => setName(event.target.value)}
-              placeholder="Enter your name"
+              placeholder={
+                session?.auto_generate_names
+                  ? "A name will be generated for you"
+                  : "Enter your name"
+              }
+              readOnly={session?.auto_generate_names}
               maxLength={30}
               autoComplete="off"
               autoFocus
             />
-            <button
-              type="button"
-              className="join-regenerate-button"
-              onClick={handleRegenerate}
-            >
-              ↻
-            </button>
+            {/* Rerolling needs a registered player, which late joiners aren't yet. */}
+            {session?.auto_generate_names && name && (
+              <button
+                type="button"
+                className="join-regenerate-button"
+                onClick={handleRegenerate}
+              >
+                ↻
+              </button>
+            )}
           </div>
           {session?.requires_password &&
           <div className="join__form">
@@ -257,7 +265,7 @@ export default function JoinScreen() {
                   />
               </div>
             </div>}
-          {session?.auto_generate_names && <p>Leave blank for a generated name.</p>}
+          {session?.auto_generate_names && <p>Names are generated automatically for this game.</p>}
 
           <button
             className="join__submit"

@@ -24,6 +24,7 @@ async def start_voting(session, round_number: int) -> None:
 
     session.phase = "voting"
     session.round_deadline = None
+    session.log_event("voting_started", f"Voting opened for round {round_number}.")
 
     if session.round_timer_task is not None:
         current_task = asyncio.current_task()
