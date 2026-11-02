@@ -33,7 +33,7 @@ class SessionPlayerResponse(BaseModel):
     name: str
     ready: bool
     hidden: bool
-is_mod: bool
+    is_mod: bool
 
 class SessionGroupResponse(BaseModel):
     group_index: int
@@ -41,6 +41,14 @@ class SessionGroupResponse(BaseModel):
     players: list[SessionPlayerResponse]
     answers: dict[str, str]
     vote_counts: dict[str, int] = Field(default_factory=dict)
+
+class SessionEventResponse(BaseModel):
+    id: int
+    timestamp: datetime
+    type: str
+    player_id: str | None
+    player_name: str | None
+    message: str
 
 class SessionResponse(BaseModel):
     session_id: str
@@ -57,6 +65,7 @@ class SessionResponse(BaseModel):
     minimum_players: int | None
     maximum_players: int | None
     current_round: int
+    total_rounds: int
     current_prompt: str | None
     answers: dict[str, str]
     groups: list[SessionGroupResponse] = Field(default_factory=list)
@@ -65,6 +74,7 @@ class SessionResponse(BaseModel):
     phase: str
     scores: dict[str, int] = Field(default_factory=dict)
     round_results: list[dict] = Field(default_factory=list)
+    event_log: list[SessionEventResponse] = Field(default_factory=list)
 
 class StartGameRequest(BaseModel):
     game_id: str

@@ -1,9 +1,32 @@
+import asyncio
+
 from fastapi import WebSocket, WebSocketDisconnect
 
 from backend.app.sessions.session import Session
 from backend.app.websockets.connection_manager import (
     connection_manager,
 )
+
+# Page changes briefly close a player's socket; only log disconnects that last.
+DISCONNECT_GRACE_SECONDS = 5
+
+# Keep references so pending tasks aren't garbage-collected before they run.
+_background_tasks: set[asyncio.Task] = set()
+
+
+async def log_disconnect_after_grace(session: Session, player_id: str) -> None:
+    await asyncio.sleep(DISCONNECT_GRACE_SECONDS)
+
+    player = session.get_player(player_id)
+    if (
+        player is None
+        or player_id in session.disconnected_players
+        or connection_manager.is_connected(session.session_id, player_id)
+    ):
+        return
+
+    session.disconnected_players.add(player_id)
+    session.log_event("player_disconnected", "disconnected", player)
 
 
 def public_players(session: Session) -> list[dict]:
@@ -50,6 +73,10 @@ async def handle_join(
         websocket=websocket,
     )
 
+    if player_id in session.disconnected_players:
+        session.disconnected_players.discard(player_id)
+        session.log_event("player_reconnected", "reconnected", player)
+
     await websocket.send_json(
         {
             "type": "connected",
@@ -71,6 +98,13 @@ async def handle_join(
             "game_id": session.game_id,
         })
 
+        if session.is_player_in_current_round(player_id):
+            await websocket.send_json({
+                "type": "round_joined",
+                "session_id": session.session_id,
+                "current_round": session.current_round,
+            })
+
     await send_player_prompt(session, player_id)
 
     try:
@@ -78,10 +112,15 @@ async def handle_join(
             await websocket.receive_text()
 
     except WebSocketDisconnect:
-        connection_manager.disconnect(
+        removed = connection_manager.disconnect(
             session_id=session.session_id,
             player_id=player_id,
+            websocket=websocket,
         )
+        if removed:
+            task = asyncio.create_task(log_disconnect_after_grace(session, player_id))
+            _background_tasks.add(task)
+            task.add_done_callback(_background_tasks.discard)
 
 
 async def send_player_prompt(

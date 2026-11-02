@@ -50,6 +50,15 @@ export interface SessionGroup {
   vote_counts: Record<string, number>;
 }
 
+export interface SessionEvent {
+  id: number;
+  timestamp: string;
+  type: string;
+  player_id: string | null;
+  player_name: string | null;
+  message: string;
+}
+
 export interface SessionResponse {
   session_id: string;
   host_name: string;
@@ -68,6 +77,7 @@ export interface SessionResponse {
   minimum_players: number | null;
   maximum_players: number | null;
   current_round: number;
+  total_rounds: number;
   current_prompt: string;
   answers: Record<string, string>;
   groups: SessionGroup[];
@@ -79,6 +89,7 @@ export interface SessionResponse {
     round: number;
     groups: SessionGroup[];
   }[];
+  event_log: SessionEvent[];
 }
 
 export interface KickPlayerRequest {

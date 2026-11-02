@@ -24,7 +24,7 @@ export async function regenerateName(sessionId: string, player_id: string): Prom
   return data.name;
 }
 
-export type { SessionPlayer, SessionResponse } from "../../../shared/types/messages";
+export type { SessionEvent, SessionPlayer, SessionResponse } from "../../../shared/types/messages";
 
 async function apiResponse<T>(response: Response): Promise<T> {
   const data = await response.json();

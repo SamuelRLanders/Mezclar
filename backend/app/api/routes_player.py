@@ -58,8 +58,11 @@ def join_session(
     if session.password is not None:
         validate_password(session, request.password)
 
-    if session.use_profanity_filter:
-        valid = validate_name(request.name)
+    # With auto-generated names on, players can't pick their own.
+    requested_name = None if session.auto_generate_names else request.name
+
+    if session.use_profanity_filter and requested_name is not None:
+        valid = validate_name(requested_name)
         if not valid:
             raise HTTPException(
                 status_code=400,
@@ -85,11 +88,30 @@ def join_session(
             detail="This game is already in progress and isn't accepting new players.",
         )
 
-    try:
-        player = session.add_player(
-            player_id=request.player_id,
-            requested_name=request.name,
+    if session.is_last_round():
+        raise HTTPException(
+            status_code=403,
+            detail="This game is in its last round, so it's too late to join.",
         )
+
+    try:
+        if session.game_started:
+            player = session.add_late_player(
+                player_id=request.player_id,
+                requested_name=requested_name,
+            )
+            session.log_event(
+                "player_joined_late",
+                "joined late and is waiting for the next round"
+                if session.game_id == "quiplash" else "joined late",
+                player,
+            )
+        else:
+            player = session.add_player(
+                player_id=request.player_id,
+                requested_name=requested_name,
+            )
+            session.log_event("player_joined", "joined the lobby", player)
     except ValueError as error:
         raise HTTPException(
             status_code=400,

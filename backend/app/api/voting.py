@@ -24,6 +24,7 @@ async def start_voting(session, round_number: int) -> None:
 
     session.phase = "voting"
     session.round_deadline = None
+    session.log_event("voting_started", f"Voting opened for round {round_number}.")
 
     if session.round_timer_task is not None:
         current_task = asyncio.current_task()
@@ -39,10 +40,14 @@ async def start_voting(session, round_number: int) -> None:
     
     # Send each player the answers from every OTHER group.
     for player_id in session.players:
-        voter_group_index = session.get_player_group_index(
-            round_number,
-            player_id,
-        )
+        try:
+            voter_group_index = session.get_player_group_index(
+                round_number,
+                player_id,
+            )
+        except ValueError:
+            # Late joiners waiting for the next round aren't in a group yet.
+            continue
 
         voting_options_by_group = []
 

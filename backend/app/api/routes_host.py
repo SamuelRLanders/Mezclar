@@ -156,10 +156,12 @@ def get_session_info(session_id: SessionCode) -> SessionResponse:
         requires_password=session.requires_password,
         game_id=session.game_id, minimum_players=session.minimum_players,
         maximum_players=session.maximum_players, current_round=session.current_round,
+        total_rounds=session.total_rounds,
         current_prompt=session.current_prompt, answers=session.answers,
         round_duration_seconds=session.round_duration_seconds, round_deadline=session.round_deadline,
         groups=groups, phase=session.phase,
-        scores=session.scores, round_results=round_results
+        scores=session.scores, round_results=round_results,
+        event_log=session.event_log,
     )
 
 @router.post("/session/{session_id}/start")
@@ -296,7 +298,7 @@ async def advance_round(session_id: str) -> dict[str, str | int]:
 
     # Advance to the next round or transition to the finished phase.
     try:
-        session.advance_round()
+        inserted_players = session.advance_round()
     except ValueError as error:
         raise HTTPException(status_code=400, detail=str(error))
 
@@ -351,6 +353,18 @@ async def advance_round(session_id: str) -> dict[str, str | int]:
 
     for player_id in session.players:
         await send_player_prompt(session, player_id)
+
+    # Move late joiners off the waiting page now that they're in this round.
+    for player_id in inserted_players:
+        await connection_manager.send_to_player(
+            session.session_id,
+            player_id,
+            {
+                "type": "round_joined",
+                "session_id": session.session_id,
+                "current_round": session.current_round,
+            },
+        )
 
     return {
         "session_id": session.session_id,

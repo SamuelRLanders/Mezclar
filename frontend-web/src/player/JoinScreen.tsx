@@ -27,6 +27,8 @@ export default function JoinScreen() {
   const storedPlayerId = code ? sessionStorage.getItem("mezclar-player:" + code) : null;
   const isReturningPlayer = !!session && session.players.some((player) => player.player_id === storedPlayerId);
   const lateJoinBlocked = !!session && session.game_started && !session.allow_late_join && !isReturningPlayer;
+  const tooLateToJoin = !!session && session.game_started && session.game_id === "quiplash"
+    && session.current_round >= session.total_rounds && !isReturningPlayer;
 
   useEffect(() => {
     if (!code) return;
@@ -176,6 +178,28 @@ export default function JoinScreen() {
     );
   }
 
+  if (tooLateToJoin) {
+    return (
+      <main className="join">
+        <div className="join__inner">
+          <header className="join__header">
+            <p className="join__eyebrow">Last round</p>
+
+            <h1 className="join__title">{code}</h1>
+
+            <p className="join__welcome">
+              This game is in its last round, so it's too late to join.
+            </p>
+          </header>
+
+          <Link className="join__submit join__home" to="/">
+            Back to home
+          </Link>
+        </div>
+      </main>
+    );
+  }
+
   return (
     <main className="join">
       <div className="join__inner">
@@ -202,18 +226,26 @@ export default function JoinScreen() {
               type="text"
               value={name}
               onChange={(event) => setName(event.target.value)}
-              placeholder="Enter your name"
+              placeholder={
+                session?.auto_generate_names
+                  ? "A name will be generated for you"
+                  : "Enter your name"
+              }
+              readOnly={session?.auto_generate_names}
               maxLength={30}
               autoComplete="off"
               autoFocus
             />
-            <button
-              type="button"
-              className="join-regenerate-button"
-              onClick={handleRegenerate}
-            >
-              ↻
-            </button>
+            {/* Rerolling needs a registered player, which late joiners aren't yet. */}
+            {session?.auto_generate_names && name && (
+              <button
+                type="button"
+                className="join-regenerate-button"
+                onClick={handleRegenerate}
+              >
+                ↻
+              </button>
+            )}
           </div>
           {session?.requires_password &&
           <div className="join__form">
@@ -233,7 +265,7 @@ export default function JoinScreen() {
                   />
               </div>
             </div>}
-          {session?.auto_generate_names && <p>Leave blank for a generated name.</p>}
+          {session?.auto_generate_names && <p>Names are generated automatically for this game.</p>}
 
           <button
             className="join__submit"

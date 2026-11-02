@@ -24,16 +24,27 @@ class ConnectionManager:
         self,
         session_id: str,
         player_id: str,
-    ) -> None:
+        websocket: WebSocket | None = None,
+    ) -> bool:
+        """Remove a player's socket; return whether one was actually removed."""
         session_connections = self.active_connections.get(session_id)
 
         if not session_connections:
-            return
+            return False
+
+        # A newer socket may have replaced this one; leave it alone.
+        if websocket is not None and session_connections.get(player_id) is not websocket:
+            return False
 
         session_connections.pop(player_id, None)
 
         if not session_connections:
             self.active_connections.pop(session_id, None)
+
+        return True
+
+    def is_connected(self, session_id: str, player_id: str) -> bool:
+        return player_id in self.active_connections.get(session_id, {})
 
     async def send_to_player(
         self,

@@ -12,6 +12,8 @@ from backend.app.naming.generator import generate_unique_name, validate_name
 from backend.app.sessions.player import Player
 from backend.app.games.quiplash.prompts import QUIPLASH_PROMPTS
 
+MAX_EVENT_LOG = 100
+
 class Session:
     def __init__(self, session_id: str, host_name: str = "Host", settings: dict[str, JsonValue] | None = None, password: str | None = None):
         self.session_id = session_id
@@ -39,6 +41,9 @@ class Session:
         self.current_prompt: str | None = None
         self.answers: dict[str, str] = {}
 
+        # Players who joined mid-game and are waiting for the next round to start.
+        self.waiting_players: list[str] = []
+
         # Subgroup assignments for each submission round.
         # Round number -> list of groups -> player IDs.
         self.round_groups: dict[int, list[list[str]]] = {}
@@ -64,6 +69,25 @@ class Session:
 
         self.phase: str = "lobby"
 
+        # Recent events shown in the host's game log.
+        self.event_log: list[dict] = []
+        self._next_event_id: int = 1
+
+        # Players whose disconnect was logged, so their reconnect can be logged too.
+        self.disconnected_players: set[str] = set()
+
+    def log_event(self, event_type: str, message: str, player: Player | None = None) -> None:
+        """Record something the host should see in the game log."""
+        self.event_log.append({
+            "id": self._next_event_id,
+            "timestamp": datetime.now(timezone.utc),
+            "type": event_type,
+            "player_id": player.player_id if player else None,
+            "player_name": player.name if player else None,
+            "message": message,
+        })
+        self._next_event_id += 1
+        del self.event_log[:-MAX_EVENT_LOG]
 
     def set_auto_generate(self, enabled: bool) -> None:
         self.auto_generate_names = enabled
@@ -108,6 +132,9 @@ class Session:
         if player_id in self.players:
             player = self.players.pop(player_id)
             self.remove_used_name(player.name)
+        if player_id in self.waiting_players:
+            self.waiting_players.remove(player_id)
+        self.disconnected_players.discard(player_id)
 
     def get_player(self, player_id: str) -> Player | None:
         return self.players.get(player_id)
@@ -125,6 +152,50 @@ class Session:
                 return group_index
 
         raise ValueError("Player is not assigned to a group in this round.")
+
+    def is_last_round(self) -> bool:
+        """Return whether a Quiplash game is in (or past) its final round."""
+        return (
+            self.game_started
+            and self.game_id == "quiplash"
+            and self.current_round >= self.total_rounds
+        )
+
+    def is_player_in_current_round(self, player_id: str) -> bool:
+        groups = self.round_groups.get(self.current_round, [])
+        return any(player_id in group for group in groups)
+
+    def add_late_player(self, player_id: str, requested_name: str | None = None) -> Player:
+        """Add a player mid-game; Quiplash players wait until the next round starts."""
+        player = self.add_player(player_id, requested_name)
+        if self.game_id == "quiplash":
+            self.waiting_players.append(player_id)
+        return player
+
+    def insert_waiting_players(self) -> list[str]:
+        """Place waiting players into the current and remaining rounds' groups."""
+        inserted = list(self.waiting_players)
+
+        for player_id in inserted:
+            for round_number in range(self.current_round, self.total_rounds + 1):
+                groups = self.round_groups.get(round_number)
+                if not groups:
+                    continue
+
+                # Join the smallest group so group sizes stay balanced.
+                smallest = min(len(group) for group in groups)
+                candidates = [group for group in groups if len(group) == smallest]
+                random.choice(candidates).append(player_id)
+
+            self.scores.setdefault(player_id, 0)
+            self.log_event(
+                "player_inserted",
+                f"jumped in at round {self.current_round}",
+                self.players[player_id],
+            )
+
+        self.waiting_players.clear()
+        return inserted
 
         
     def submit_answer(self, player_id: str, answer: str) -> None:
@@ -325,6 +396,7 @@ class Session:
 
         self.game_started = True
         self.phase = "answering"
+        self.log_event("game_started", "The game started.")
 
 
     def regenerate_name(self, player_id: str) -> str: 
@@ -348,6 +420,7 @@ class Session:
         player = self.get_player(player_id)
         if player is None:
             raise ValueError(f"Player with ID {player_id} does not exist.")
+        self.log_event("player_kicked", "was kicked", player)
         self.remove_player(player.player_id)
 
     def hide_player(self, player_id: str, hidden: bool = True) -> Player:
@@ -374,7 +447,7 @@ class Session:
     #     self.answers.clear()
 
     
-    def advance_round(self) -> None:
+    def advance_round(self) -> list[str]:
         if not self.game_started:
             raise ValueError("The game has not started.")
 
@@ -384,20 +457,26 @@ class Session:
         next_round = self.current_round + 1
 
         if next_round > self.total_rounds:
+            # Pressing advance again after the end shouldn't log a second finish.
+            if self.phase != "finished":
+                self.log_event("game_finished", "The game finished.")
             self.phase = "finished"
-            return
+            return []
 
         if next_round not in self.group_prompts:
             raise ValueError("Prompts have not been assigned for the next round.")
 
         self.current_round = next_round
         self.phase = "answering"
+        self.log_event("round_started", f"Round {next_round} started.")
 
         # Keep a default prompt temporarily for compatibility with existing routes.
         self.current_prompt = next(iter(self.group_prompts[next_round].values()))
 
         # Do not clear group_answers: previous rounds' answers must remain available.
         self.answers.clear()
+
+        return self.insert_waiting_players()
 
 
     def mod_player(self, player_id: str, is_mod: bool) -> Player:
