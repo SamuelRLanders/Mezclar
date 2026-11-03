@@ -10,7 +10,7 @@ async def start_voting(session, round_number: int) -> None:
         f"round={round_number}, session={session.session_id}"
     )
 
-    if session.phase != "answering" or session.game_paused:
+    if session.phase != "answering" or session.game_paused or session.current_round != round_number:
         print(f"[VOTING] Returning because phase is {session.phase!r}")
         return
 
@@ -42,6 +42,8 @@ async def send_voting_options(session, round_number: int, player_ids: list[str])
     prompts = session.group_prompts.get(round_number, {})
 
     for player_id in player_ids:
+        if session.current_round != round_number or session.phase != "voting":
+            return
         try:
             voter_group_index = session.get_player_group_index(
                 round_number,

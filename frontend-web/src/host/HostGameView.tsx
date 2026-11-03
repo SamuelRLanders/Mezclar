@@ -11,6 +11,7 @@ import {
   startRoundTimer,
 } from "../api/client";
 import "./HostGameView.css";
+import { GAMES } from "./games";
 
 export default function HostGameView() {
   const { code } = useParams<{ code: string }>();
@@ -126,7 +127,7 @@ export default function HostGameView() {
   }
 
   async function handleStartTimer() {
-    if (!code || controlsBusy) {
+    if (!code || !session || controlsBusy) {
       return;
     }
 
@@ -134,7 +135,7 @@ export default function HostGameView() {
     setTimerError("");
 
     try {
-      await startRoundTimer(code, timerDuration);
+      await startRoundTimer(code, timerDuration, session.current_round);
       const updatedSession = await getSession(code);
       setSession(updatedSession);
     } catch (error) {
@@ -328,7 +329,7 @@ export default function HostGameView() {
 
           <p>
             {isFinished
-              ? "The game has ended. Review the final standings and round results below."
+              ? `${GAMES.find((game) => game.id === session?.game_id)?.name ?? session?.game_id} has ended. Review the final standings and round results below.`
               : "Keep an eye on the action, manage the timer, and move the game forward."}
           </p>
         </section>

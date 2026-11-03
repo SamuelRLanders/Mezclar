@@ -1,10 +1,11 @@
 import asyncio
 from datetime import datetime, timedelta, timezone
-from unittest.mock import Mock
+from unittest.mock import AsyncMock, Mock
 
 import pytest
 
 from backend.app.api import routes_host
+from backend.app.api.voting import start_voting
 from backend.app.sessions import registry
 
 
@@ -76,6 +77,9 @@ def test_skip_resets_the_timer_and_rejects_stale_requests(client, running_game, 
     assert client.post(f"/session/{code}/submit-answer", json={
         "player_id": "first", "answer": "late", "current_round": 1,
     }).status_code == 400
+    assert client.post(f"/session/{code}/start-timer", headers=headers, json={
+        "duration_seconds": 60, "current_round": 1,
+    }).status_code == 400
 
 
 def test_expired_round_rejects_answers_before_timer_task_runs(client, running_game, clock):
@@ -85,6 +89,20 @@ def test_expired_round_rejects_answers_before_timer_task_runs(client, running_ga
     for action in ["pause", "extend"]:
         assert client.post(f"/session/{code}/control", headers=headers, json={"action": action, "current_round": 1}).status_code == 400
     assert session.response_progress()["submitted_count"] == 0
+
+
+def test_skip_stops_sending_old_voting_options(running_game, monkeypatch):
+    _, _, session = running_game
+
+    async def skip_round(*args):
+        session.advance_round()
+
+    send = AsyncMock(side_effect=skip_round)
+    monkeypatch.setattr("backend.app.api.voting.connection_manager.send_to_player", send)
+    asyncio.run(start_voting(session, 1))
+    assert send.await_count == 1
+    assert session.current_round == 2
+    assert session.phase == "answering"
 
 
 @pytest.mark.parametrize("final_round", [False, True])

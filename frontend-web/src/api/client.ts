@@ -191,6 +191,7 @@ export async function advanceRound(
 export async function startRoundTimer(
   sessionId: string,
   durationSeconds: number,
+  currentRound: number,
 ): Promise<void> {
   await apiResponse(
     await fetch(`/api/session/${sessionId}/start-timer`, {
@@ -199,7 +200,7 @@ export async function startRoundTimer(
         "Content-Type": "application/json",
         "X-Host-Token": sessionStorage.getItem("mezclar-host:" + sessionId) ?? "",
       },
-      body: JSON.stringify({ duration_seconds: durationSeconds }),
+      body: JSON.stringify({ duration_seconds: durationSeconds, current_round: currentRound }),
     }),
   );
 }

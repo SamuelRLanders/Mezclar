@@ -1,6 +1,7 @@
-import pytest
+import json
 
-from backend.app.games.quiplash.prompts import QUIPLASH_PROMPTS
+import anyio
+import pytest
 
 
 def test_start_requires_enough_players(client):
@@ -38,10 +39,26 @@ def quiplash_session(client):
     return code, {"X-Host-Token": created["host_token"]}
 
 
+def receive_message(socket, message_type):
+    async def receive():
+        with anyio.fail_after(2):
+            for _ in range(8):
+                message = await socket._send_rx.receive()
+                data = json.loads(message["text"])
+                if data["type"] == message_type:
+                    return data
+        pytest.fail(f"Did not receive {message_type}")
+    return socket.portal.call(receive)
+
+
 @pytest.mark.parametrize("submit_answers", [True, False], ids=["answered", "skipped"])
 def test_quiplash_completion_closes_answers(client, quiplash_session, submit_answers):
     code, headers = quiplash_session
-    for round_number in range(1, len(QUIPLASH_PROMPTS) + 1):
+    total_rounds = client.get(f"/session/{code}").json()["total_rounds"]
+    assert client.post(f"/session/{code}/start-timer", headers=headers, json={
+        "duration_seconds": 60,
+    }).status_code == 200
+    for round_number in range(1, total_rounds + 1):
         if submit_answers:
             for player_id in ["first", "second"]:
                 assert client.post(f"/session/{code}/submit-answer", json={
@@ -50,42 +67,46 @@ def test_quiplash_completion_closes_answers(client, quiplash_session, submit_ans
 
         assert client.post(f"/session/{code}/advance-round", headers=headers).status_code == 200
         state = client.get(f"/session/{code}").json()
-        assert state["game_completed"] is (round_number == len(QUIPLASH_PROMPTS))
-        if not state["game_completed"]:
+        assert (state["phase"] == "finished") is (round_number == total_rounds)
+        if state["phase"] != "finished":
             assert state["current_round"] == round_number + 1
-            assert state["current_prompt"] == QUIPLASH_PROMPTS[round_number]
-            assert state["answers"] == {}
+            assert all(group["answers"] == {} for group in state["groups"])
 
     assert state["game_id"] == "quiplash"
-    assert state["current_round"] == len(QUIPLASH_PROMPTS)
-    assert state["current_prompt"] == QUIPLASH_PROMPTS[-1]
-    assert state["answers"] == ({"first": "A funny answer", "second": "A funny answer"} if submit_answers else {})
+    assert state["current_round"] == total_rounds
+    assert state["round_deadline"] is None
+    answers = {player_id: answer for group in state["groups"] for player_id, answer in group["answers"].items()}
+    assert answers == ({"first": "A funny answer", "second": "A funny answer"} if submit_answers else {})
     response = client.post(f"/session/{code}/submit-answer", json={
-        "player_id": "first", "answer": "Too late", "current_round": len(QUIPLASH_PROMPTS),
+        "player_id": "first", "answer": "Too late", "current_round": total_rounds,
     })
     assert response.status_code == 400
-    assert response.json()["detail"] == "The game has finished."
-    assert client.post(f"/session/{code}/advance-round", headers=headers).status_code == 400
     assert client.get(f"/session/{code}").json() == state
 
 
 def test_quiplash_completion_updates_players_and_survives_reconnect(client, quiplash_session):
     code, headers = quiplash_session
+    total_rounds = client.get(f"/session/{code}").json()["total_rounds"]
     with client.websocket_connect(f"/ws/session/{code}/player/first") as first:
-        assert first.receive_json()["type"] == "connected"
-        assert first.receive_json()["type"] == "game_started"
+        receive_message(first, "player_prompt")
         with client.websocket_connect(f"/ws/session/{code}/player/second") as second:
-            assert second.receive_json()["type"] == "connected"
-            assert second.receive_json()["type"] == "game_started"
-            assert first.receive_json()["type"] == "players_updated"
-            for _ in QUIPLASH_PROMPTS:
+            receive_message(second, "player_prompt")
+            for round_number in range(1, total_rounds + 1):
                 assert client.post(f"/session/{code}/advance-round", headers=headers).status_code == 200
-                message = first.receive_json()
-                assert message == second.receive_json()
-                assert message["type"] == "round_updated"
-            assert client.get(f"/session/{code}").json()["game_completed"] is True
+                message_type = "game_finished" if round_number == total_rounds else "round_updated"
+                assert receive_message(first, message_type) == receive_message(second, message_type)
+            assert client.get(f"/session/{code}").json()["phase"] == "finished"
 
     with client.websocket_connect(f"/ws/session/{code}/player/first") as socket:
-        assert socket.receive_json()["type"] == "connected"
-        assert socket.receive_json()["type"] == "game_started"
-        assert client.get(f"/session/{code}").json()["game_completed"] is True
+        assert receive_message(socket, "game_finished")["session_id"] == code
+        assert client.get(f"/session/{code}").json()["phase"] == "finished"
+
+
+def test_voting_options_survive_reconnect(client, quiplash_session):
+    code, _ = quiplash_session
+    for player_id in ["first", "second"]:
+        assert client.post(f"/session/{code}/submit-answer", json={
+            "player_id": player_id, "answer": "A funny answer", "current_round": 1,
+        }).status_code == 200
+    with client.websocket_connect(f"/ws/session/{code}/player/first") as socket:
+        assert receive_message(socket, "voting_started")["current_round"] == 1

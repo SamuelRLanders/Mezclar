@@ -49,6 +49,7 @@ export default function QuipInput({
       const received = session?.current_round === currentRound
         && session.submitted_player_ids.includes(playerId);
       if (received) {
+        setQuip(session.groups.find((group) => Object.hasOwn(group.answers, playerId))?.answers[playerId] ?? quip);
         setSubmitted(true);
       } else {
         setMessage(

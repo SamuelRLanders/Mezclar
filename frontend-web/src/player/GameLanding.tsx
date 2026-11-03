@@ -1,6 +1,6 @@
 
 import { useEffect, useState } from "react";
-import { Link, useLocation, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import {
   getSession,
   playerSocketUrl,
@@ -9,6 +9,7 @@ import {
 } from "../api/client";
 import QuipInput from "./QuipInput";
 import "./GameLanding.css";
+import { GAMES } from "../host/games";
 
 interface GameLandingState {
   playerId?: string;
@@ -22,8 +23,11 @@ export default function GameLanding() {
     state: GameLandingState | null;
   };
 
-  const { playerId, sessionId } = state || {};
+  const { code } = useParams<{ code: string }>();
+  const sessionId = state?.sessionId ?? code;
+  const playerId = state?.playerId ?? (sessionId ? sessionStorage.getItem("mezclar-player:" + sessionId) : null);
   const navigate = useNavigate();
+  const [connectionAttempt, setConnectionAttempt] = useState(0);
 
   const [session, setSession] = useState<SessionResponse | null>(null);
   const [playerPrompt, setPlayerPrompt] = useState<{
@@ -65,14 +69,14 @@ export default function GameLanding() {
     }
 
     getSession(sessionId)
-      .then(setSession)
+      .then((data) => { setSession(data); setError(""); })
       .catch((error: unknown) => {
         setError(
           error instanceof Error ? error.message : "Could not load the game.",
         );
       })
       .finally(() => setLoading(false));
-  }, [sessionId]);
+  }, [sessionId, connectionAttempt]);
 
   useEffect(() => {
     if (!sessionId || !playerId) {
@@ -80,6 +84,7 @@ export default function GameLanding() {
     }
 
     const websocket = new WebSocket(playerSocketUrl(sessionId, playerId));
+    let reconnectTimeout: number;
 
     const leaveGame = () => {
       websocket.onclose = null;
@@ -174,14 +179,19 @@ export default function GameLanding() {
     };
 
     websocket.onclose = (event) => {
-      if (event.code === 4403) leaveGame();
+      if (event.code === 4403 || event.code === 1008) {
+        leaveGame();
+        return;
+      }
+      reconnectTimeout = window.setTimeout(() => setConnectionAttempt((attempt) => attempt + 1), 1000);
     };
 
     return () => {
       websocket.onclose = null;
+      window.clearTimeout(reconnectTimeout);
       websocket.close();
     };
-  }, [sessionId, playerId, navigate]);
+  }, [sessionId, playerId, navigate, connectionAttempt]);
 
   useEffect(() => {
     const deadline = session?.round_deadline;
@@ -569,6 +579,7 @@ export default function GameLanding() {
                   <h1>
                     Game <span>over!</span>
                   </h1>
+                  <p>{GAMES.find((game) => game.id === session.game_id)?.name ?? session.game_id} complete</p>
                   <p>
                     That's what we call a good round. Here's how everyone
                     finished.

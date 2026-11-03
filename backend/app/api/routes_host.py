@@ -478,6 +478,9 @@ async def start_round_timer(
     if session.phase != "answering" or session.game_paused:
         raise HTTPException(status_code=400, detail="The answering round is not running.")
 
+    if request.current_round is not None and request.current_round != session.current_round:
+        raise HTTPException(status_code=400, detail="The round has changed. Please refresh.")
+
     if not 10 <= request.duration_seconds <= 300:
         raise HTTPException(
             status_code=400,

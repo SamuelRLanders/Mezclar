@@ -158,6 +158,7 @@ class GameControlRequest(BaseModel):
 
 class StartRoundTimerRequest(BaseModel):
     duration_seconds: int
+    current_round: int | None = Field(default=None, gt=0)
 
 class SubmitVoteRequest(BaseModel):
     voter_id: str
