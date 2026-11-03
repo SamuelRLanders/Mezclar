@@ -153,7 +153,7 @@ async def submit_answer(
         )
 
     try:
-        session.submit_answer(request.player_id, request.answer)
+        session.submit_answer(request.player_id, request.answer, request.current_round)
     except ValueError as error:
         raise HTTPException(
             status_code=400,

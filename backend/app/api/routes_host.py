@@ -9,10 +9,13 @@ from backend.app.models.schemas import (
     StartGameRequest,
     ModPlayerRequest,
     StartRoundTimerRequest,
+    GameControlRequest,
 )
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, Header, HTTPException
+from hmac import compare_digest
 from backend.app.sessions.registry import get_or_create_session, get_session
 from backend.app.sessions import registry
+from backend.app.sessions.session import Session
 from backend.app.api import SessionCode
 import asyncio
 from datetime import datetime, timedelta, timezone
@@ -25,6 +28,15 @@ from backend.app.websockets.connection_manager import (
 from backend.app.websockets.handlers import broadcast_roster, send_player_prompt
 
 router = APIRouter()
+
+
+def require_host(session_id: str, x_host_token: str | None = Header(default=None)) -> Session:
+    session = get_session(session_id)
+    if session is None:
+        raise HTTPException(status_code=404, detail="Session not found")
+    if not compare_digest(session.host_token.encode(), (x_host_token or "").encode()):
+        raise HTTPException(status_code=403, detail="Only the host can control this game.")
+    return session
 
 @router.post("/session/{session_id}/toggle-auto-names")
 def toggle_auto_names(session_id: str, request: ToggleAutoNamesRequest) -> None:
@@ -162,6 +174,7 @@ def get_session_info(session_id: SessionCode) -> SessionResponse:
         total_rounds=session.total_rounds,
         current_prompt=session.current_prompt, answers=session.answers,
         round_duration_seconds=session.round_duration_seconds, round_deadline=session.round_deadline,
+        game_paused=session.game_paused, paused_remaining=session.paused_remaining,
         groups=groups, phase=session.phase,
         scores=session.scores, round_results=round_results,
         event_log=session.event_log,
@@ -292,20 +305,10 @@ async def mod_player(session_id: str, request: ModPlayerRequest) -> SessionPlaye
 
 
 @router.post("/session/{session_id}/advance-round")
-async def advance_round(session_id: str) -> dict[str, str | int]:
-    session = get_session(session_id)
-
-    if not session:
-        raise HTTPException(
-            status_code=404,
-            detail="Session not found",
-        )
+async def advance_round(session_id: str, session: Session = Depends(require_host)) -> dict[str, str | int]:
 
     # Remember whether the current round has an active timer.
-    timer_was_active = (
-        session.round_deadline is not None
-        and session.round_duration_seconds is not None
-    )
+    timer_was_active = session.round_duration_seconds is not None
 
     # Advance to the next round or transition to the finished phase.
     try:
@@ -319,6 +322,8 @@ async def advance_round(session_id: str) -> dict[str, str | int]:
         session.round_timer_task = None
 
     session.round_deadline = None
+    session.game_paused = False
+    session.paused_remaining = None
 
     if session.phase == "finished":
         await connection_manager.broadcast_to_session(
@@ -354,6 +359,8 @@ async def advance_round(session_id: str) -> dict[str, str | int]:
             "current_round": session.current_round,
             "current_prompt": session.current_prompt,
             "round_duration_seconds": session.round_duration_seconds,
+            "game_paused": session.game_paused,
+            "paused_remaining": session.paused_remaining,
             "round_deadline": (
                 session.round_deadline.isoformat()
                 if session.round_deadline is not None
@@ -391,6 +398,8 @@ async def run_round_timer(session, round_number: int, deadline: datetime) -> Non
         # Ignore this task if the round or timer has since changed.
         if (
             not session.game_started
+            or session.phase != "answering"
+            or session.game_paused
             or session.current_round != round_number
             or session.round_deadline != deadline
         ):
@@ -457,17 +466,17 @@ async def run_round_timer(session, round_number: int, deadline: datetime) -> Non
 async def start_round_timer(
     session_id: str,
     request: StartRoundTimerRequest,
+    session: Session = Depends(require_host),
 ) -> dict[str, str]:
-    session = get_session(session_id)
-
-    if session is None:
-        raise HTTPException(status_code=404, detail="Session not found")
 
     if not session.game_started:
         raise HTTPException(status_code=400, detail="The game has not started.")
 
     if session.game_id != "quiplash":
         raise HTTPException(status_code=400, detail="This game does not support round timers.")
+
+    if session.phase != "answering" or session.game_paused:
+        raise HTTPException(status_code=400, detail="The answering round is not running.")
 
     if not 10 <= request.duration_seconds <= 300:
         raise HTTPException(
@@ -501,3 +510,62 @@ async def start_round_timer(
     )
 
     return {"message": "Round timer started."}
+
+
+@router.post("/session/{session_id}/control")
+async def control_game(
+    session_id: str, request: GameControlRequest, session: Session = Depends(require_host),
+) -> SessionResponse:
+    if not session.game_started or session.game_id != "quiplash" or session.phase == "finished":
+        raise HTTPException(status_code=400, detail="The game is not running.")
+    if request.current_round != session.current_round:
+        raise HTTPException(status_code=400, detail="The round has changed. Please refresh.")
+    if request.action == "skip":
+        await advance_round(session_id, session)
+        return get_session_info(session_id)
+    if session.phase != "answering":
+        raise HTTPException(status_code=400, detail="The answering round is not running.")
+
+    now = datetime.now(timezone.utc)
+    if session.round_deadline is not None and session.round_deadline <= now:
+        raise HTTPException(status_code=400, detail="This round has ended.")
+
+    if request.action == "pause":
+        if session.game_paused:
+            raise HTTPException(status_code=400, detail="The game is already paused.")
+        session.paused_remaining = (
+            (session.round_deadline - now).total_seconds() if session.round_deadline else None
+        )
+        session.round_deadline = None
+        session.game_paused = True
+    elif request.action == "resume":
+        if not session.game_paused:
+            raise HTTPException(status_code=400, detail="The game is not paused.")
+        if session.paused_remaining is not None:
+            session.round_deadline = now + timedelta(seconds=session.paused_remaining)
+        session.paused_remaining = None
+        session.game_paused = False
+    elif session.game_paused and session.paused_remaining is not None:
+        session.paused_remaining += 30
+    elif session.round_deadline is not None:
+        session.round_deadline += timedelta(seconds=30)
+    else:
+        raise HTTPException(status_code=400, detail="Start the round timer before extending it.")
+
+    if session.round_timer_task is not None:
+        session.round_timer_task.cancel()
+        session.round_timer_task = None
+    if session.round_deadline is not None:
+        session.round_timer_task = asyncio.create_task(
+            run_round_timer(session, session.current_round, session.round_deadline)
+        )
+    await connection_manager.broadcast_to_session(session_id, {
+        "type": "round_updated",
+        "current_round": session.current_round,
+        "round_deadline": session.round_deadline.isoformat() if session.round_deadline else None,
+        "game_paused": session.game_paused,
+        "paused_remaining": session.paused_remaining,
+    })
+    if request.action == "resume" and session.all_players_submitted(session.current_round):
+        await start_voting(session, session.current_round)
+    return get_session_info(session_id)

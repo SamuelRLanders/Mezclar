@@ -10,7 +10,7 @@ async def start_voting(session, round_number: int) -> None:
         f"round={round_number}, session={session.session_id}"
     )
 
-    if session.phase != "answering":
+    if session.phase != "answering" or session.game_paused:
         print(f"[VOTING] Returning because phase is {session.phase!r}")
         return
 

@@ -1,5 +1,6 @@
 from pydantic import BaseModel, ConfigDict, Field, JsonValue, StrictBool, model_validator
 from datetime import datetime
+from typing import Literal
 
 class GenerateNameResponse(BaseModel):
     name: str
@@ -80,6 +81,8 @@ class SessionResponse(BaseModel):
     groups: list[SessionGroupResponse] = Field(default_factory=list)
     round_duration_seconds: int | None
     round_deadline: datetime | None
+    game_paused: bool = False
+    paused_remaining: float | None = None
     phase: str
     scores: dict[str, int] = Field(default_factory=dict)
     round_results: list[dict] = Field(default_factory=list)
@@ -145,6 +148,13 @@ class SubmitAnswerRequest(BaseModel):
 
     player_id: str = Field(min_length=1)
     answer: str = Field(min_length=1, max_length=200)
+    current_round: int | None = Field(default=None, gt=0)
+
+class GameControlRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    action: Literal["pause", "resume", "skip", "extend"]
+    current_round: int = Field(gt=0)
 
 class StartRoundTimerRequest(BaseModel):
     duration_seconds: int

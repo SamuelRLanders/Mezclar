@@ -83,7 +83,7 @@ def test_late_joiner_waits_until_next_round(client):
 def test_late_joiner_inserted_into_current_and_remaining_rounds(client):
     code = start_quiplash(client)
     join_late(client, code)
-    assert client.post("/session/" + code + "/advance-round").status_code == 200
+    assert client.post("/session/" + code + "/advance-round", headers={"X-Host-Token": registry.get_session(code).host_token}).status_code == 200
 
     session = registry.get_session(code)
     assert session.current_round == 2
@@ -96,7 +96,7 @@ def test_late_joiner_inserted_into_current_and_remaining_rounds(client):
 def test_late_joiner_joins_smallest_group(client):
     code = start_quiplash(client)
     join_late(client, code)
-    client.post("/session/" + code + "/advance-round")
+    client.post("/session/" + code + "/advance-round", headers={"X-Host-Token": registry.get_session(code).host_token})
 
     # Four players form two pairs, so the late joiner makes one group of three.
     sizes = sorted(len(group) for group in registry.get_session(code).round_groups[2])
@@ -110,7 +110,7 @@ def test_round_joined_sent_only_to_inserted_player(client):
         "backend.app.api.routes_host.connection_manager.send_to_player",
         new_callable=AsyncMock,
     ) as send_to_player:
-        client.post("/session/" + code + "/advance-round")
+        client.post("/session/" + code + "/advance-round", headers={"X-Host-Token": registry.get_session(code).host_token})
 
     # Some callers pass positional args and some pass keywords.
     sent = [
@@ -131,7 +131,7 @@ def test_late_join_rejected_in_last_round(client):
 
 def test_late_join_rejected_after_advancing_to_last_round(client):
     code = start_quiplash(client, rounds=2)
-    client.post("/session/" + code + "/advance-round")
+    client.post("/session/" + code + "/advance-round", headers={"X-Host-Token": registry.get_session(code).host_token})
     response = join_late(client, code)
     assert response.status_code == 403
     assert "last round" in response.json()["detail"]
@@ -144,7 +144,7 @@ def test_kicked_waiting_player_is_not_inserted(client):
     code = start_quiplash(client)
     join_late(client, code)
     client.post("/session/" + code + "/kick", json={"player_id": "late"})
-    client.post("/session/" + code + "/advance-round")
+    client.post("/session/" + code + "/advance-round", headers={"X-Host-Token": registry.get_session(code).host_token})
 
     session = registry.get_session(code)
     assert session.waiting_players == []
@@ -176,7 +176,7 @@ def test_voting_skips_waiting_players():
 def test_grouped_player_told_round_joined_on_reconnect(client):
     code = start_quiplash(client)
     join_late(client, code)
-    client.post("/session/" + code + "/advance-round")
+    client.post("/session/" + code + "/advance-round", headers={"X-Host-Token": registry.get_session(code).host_token})
 
     with client.websocket_connect("/ws/session/" + code + "/player/late") as socket:
         types = [socket.receive_json()["type"] for _ in range(4)]

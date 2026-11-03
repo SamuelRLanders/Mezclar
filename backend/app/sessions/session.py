@@ -69,6 +69,8 @@ class Session:
         self.round_duration_seconds: int | None = None
         self.round_deadline: datetime | None = None
         self.round_timer_task: asyncio.Task | None = None
+        self.game_paused = False
+        self.paused_remaining: float | None = None
 
         self.phase: str = "lobby"
 
@@ -238,7 +240,7 @@ class Session:
         return leaderboard
 
         
-    def submit_answer(self, player_id: str, answer: str) -> None:
+    def submit_answer(self, player_id: str, answer: str, current_round: int | None = None) -> None:
         if not self.game_started:
             raise ValueError("The game has not started.")
 
@@ -248,6 +250,13 @@ class Session:
         # Voting and finished games are closed; an answer then would change what people vote on.
         if self.phase != "answering":
             raise ValueError("Answers are closed for this round.")
+
+        if self.game_paused:
+            raise ValueError("The game is paused.")
+        if current_round is not None and current_round != self.current_round:
+            raise ValueError("This round has ended.")
+        if self.round_deadline is not None and datetime.now(timezone.utc) >= self.round_deadline:
+            raise ValueError("This round has ended.")
 
         if self.get_player(player_id) is None:
             raise ValueError("Player not found.")
