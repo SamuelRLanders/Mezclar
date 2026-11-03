@@ -37,35 +37,26 @@ def test_start_voting_changes_phase_and_broadcasts_answers():
     assert session.round_deadline is None
     assert broadcast.await_count == len(session.players)
 
-    payloads = [
-        call.args[2]
+    ballots = {
+        call.args[1]: call.args[2]
         for call in broadcast.await_args_list
-    ]
+    }
 
-    assert all(payload["type"] == "voting_started" for payload in payloads)
-    assert all(payload["current_round"] == 1 for payload in payloads)
+    assert set(ballots) == set(session.players)
+    assert all(payload["type"] == "voting_started" for payload in ballots.values())
+    assert all(payload["current_round"] == 1 for payload in ballots.values())
 
-    # Every player should receive only their own group's answers,
-    # excluding their own answer.
-    for payload in payloads:
-        group_index = payload["group_index"]
-        group = session.round_groups[1][group_index]
-        recipient_id = next(
-            player_id
-            for player_id in group
-            if all(
-                option["player_id"] != player_id
-                for option in payload["answers"]
-            )
-        )
-        assert all(
-            option["player_id"] in group
-            for option in payload["answers"]
-        )
-        assert all(
-            option["player_id"] != recipient_id
-            for option in payload["answers"]
-        )
+    # Players vote on every OTHER group's answers; groups with no answers are skipped.
+    # Only group 0 answered, so its members get nothing to vote on and everyone else gets group 0.
+    for recipient_id, payload in ballots.items():
+        if recipient_id in session.round_groups[1][group_index]:
+            assert payload["groups"] == []
+        else:
+            assert payload["groups"] == [{
+                "group_index": group_index,
+                "prompt": session.group_prompts[1][group_index],
+                "answers": [{"player_id": player_id, "answer": "A funny answer"}],
+            }]
 
 
 def test_start_voting_does_not_broadcast_twice():

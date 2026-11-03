@@ -242,6 +242,10 @@ class Session:
         if self.game_id != "quiplash":
             raise ValueError("This game does not accept quip answers.")
 
+        # Voting and finished games are closed; an answer then would change what people vote on.
+        if self.phase != "answering":
+            raise ValueError("Answers are closed for this round.")
+
         if self.get_player(player_id) is None:
             raise ValueError("Player not found.")
 
@@ -265,6 +269,10 @@ class Session:
 
         round_answers = self.group_answers.setdefault(round_number, {})
         group_answers = round_answers.setdefault(group_index, {})
+
+        # One accepted answer per player per round; the first one stands.
+        if player_id in group_answers:
+            raise ValueError("You already submitted an answer this round.")
 
         group_answers[player_id] = answer
 

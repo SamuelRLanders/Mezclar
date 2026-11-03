@@ -244,6 +244,48 @@ def test_submit_answer_rejects_player_without_group_assignment():
         session.submit_answer("player1", "A funny answer")
 
 
+def start_six_player_game() -> Session:
+    session = Session("abc123", settings={"rounds": 3})
+    session.configure_game("quiplash", 2, 50)
+    for i in range(6):
+        session.add_player(f"player{i}", f"Player {i}")
+    session.start_game()
+    return session
+
+
+def test_submit_answer_rejects_a_second_answer_in_the_same_round():
+    session = start_six_player_game()
+    group_index = session.get_player_group_index(1, "player0")
+    session.submit_answer("player0", "First answer")
+
+    with pytest.raises(ValueError, match="already submitted"):
+        session.submit_answer("player0", "Second answer")
+
+    assert session.group_answers[1][group_index]["player0"] == "First answer"
+
+
+def test_submit_answer_allows_a_new_answer_next_round():
+    session = start_six_player_game()
+    session.submit_answer("player0", "Round 1 answer")
+    session.advance_round()
+
+    session.submit_answer("player0", "Round 2 answer")
+
+    group_index = session.get_player_group_index(2, "player0")
+    assert session.group_answers[2][group_index]["player0"] == "Round 2 answer"
+
+
+@pytest.mark.parametrize("phase", ["voting", "finished"])
+def test_submit_answer_rejected_outside_answering_phase(phase):
+    session = start_six_player_game()
+    session.phase = phase
+
+    with pytest.raises(ValueError, match="Answers are closed"):
+        session.submit_answer("player0", "Too late")
+
+    assert session.group_answers.get(1, {}) == {}
+
+
 
 def test_advance_round_uses_assigned_prompts_and_preserves_answers():
     session = Session("abc123", settings={"rounds": 3})
