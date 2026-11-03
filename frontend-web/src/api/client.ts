@@ -138,6 +138,7 @@ export async function submitAnswer(
   sessionId: string,
   playerId: string,
   answer: string,
+  currentRound: number,
 ): Promise<void> {
   await apiResponse(await fetch(
     `/api/session/${sessionId}/submit-answer`,
@@ -147,6 +148,7 @@ export async function submitAnswer(
       body: JSON.stringify({
         player_id: playerId,
         answer,
+        current_round: currentRound,
       }),
     },
   ));
@@ -181,6 +183,7 @@ export async function advanceRound(
     `/api/session/${sessionId}/advance-round`,
     {
       method: "POST",
+      headers: { "X-Host-Token": sessionStorage.getItem("mezclar-host:" + sessionId) ?? "" },
     },
   ));
 }
@@ -192,10 +195,26 @@ export async function startRoundTimer(
   await apiResponse(
     await fetch(`/api/session/${sessionId}/start-timer`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        "X-Host-Token": sessionStorage.getItem("mezclar-host:" + sessionId) ?? "",
+      },
       body: JSON.stringify({ duration_seconds: durationSeconds }),
     }),
   );
+}
+
+export async function controlGame(
+  sessionId: string, action: "pause" | "resume" | "skip" | "extend", currentRound: number,
+): Promise<SessionResponse> {
+  return apiResponse(await fetch(`/api/session/${sessionId}/control`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "X-Host-Token": sessionStorage.getItem("mezclar-host:" + sessionId) ?? "",
+    },
+    body: JSON.stringify({ action, current_round: currentRound }),
+  }));
 }
 
 export async function modPlayer(code: string, playerId: string, mod: boolean): Promise<SessionPlayer> {

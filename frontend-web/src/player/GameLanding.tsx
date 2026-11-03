@@ -186,6 +186,11 @@ export default function GameLanding() {
   useEffect(() => {
     const deadline = session?.round_deadline;
 
+    if (session?.game_paused) {
+      setSecondsRemaining(session.paused_remaining === null ? null : Math.ceil(session.paused_remaining));
+      return;
+    }
+
     if (!deadline || session?.phase === "finished") {
       setSecondsRemaining(null);
       return;
@@ -205,7 +210,7 @@ export default function GameLanding() {
     const intervalId = window.setInterval(updateCountdown, 250);
 
     return () => window.clearInterval(intervalId);
-  }, [session?.round_deadline, session?.phase]);
+  }, [session?.round_deadline, session?.phase, session?.game_paused, session?.paused_remaining]);
 
   async function handleSubmitVote() {
     if (
@@ -307,6 +312,7 @@ export default function GameLanding() {
 
         {!loading && !error && session && (
           <>
+              {session.game_paused && <p role="status">Paused</p>}
               {isVoting && playerId && session.submitted_player_ids.includes(playerId) && (
                 <p role="status">Response received</p>
               )}
@@ -364,6 +370,7 @@ export default function GameLanding() {
                       sessionId={sessionId}
                       playerId={playerId}
                       currentRound={session.current_round}
+                      disabled={session.game_paused || (session.round_deadline !== null && secondsRemaining === 0)}
                       acceptedAnswer={session.submitted_player_ids.includes(playerId)
                         ? session.groups.find((group) => Object.hasOwn(group.answers, playerId))?.answers[playerId]
                         : undefined}

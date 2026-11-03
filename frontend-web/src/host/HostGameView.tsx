@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import {
-  advanceRound,
+  controlGame,
   getSession,
   hostSocketUrl,
   kickPlayer,
@@ -25,6 +25,10 @@ export default function HostGameView() {
   const [timerDuration, setTimerDuration] = useState(60);
   const [isStartingTimer, setIsStartingTimer] = useState(false);
   const [timerError, setTimerError] = useState("");
+  const [isControlling, setIsControlling] = useState(false);
+  const [controlError, setControlError] = useState("");
+  const hasHostAccess = !!code && !!sessionStorage.getItem("mezclar-host:" + code);
+  const controlsBusy = isControlling || isStartingTimer || isAdvancing || !hasHostAccess;
 
   const [kickError, setKickError] = useState("");
 
@@ -88,7 +92,7 @@ export default function HostGameView() {
   }, [code]);
 
   async function handleAdvanceRound() {
-    if (!code || isAdvancing) {
+    if (!code || !session || controlsBusy) {
       return;
     }
 
@@ -96,7 +100,7 @@ export default function HostGameView() {
     setAdvanceError("");
 
     try {
-      await advanceRound(code);
+      setSession(await controlGame(code, "skip", session.current_round));
     } catch (error) {
       setAdvanceError(
         error instanceof Error
@@ -108,8 +112,21 @@ export default function HostGameView() {
     }
   }
 
+  async function handleControl(action: "pause" | "resume" | "extend") {
+    if (!code || !session || controlsBusy) return;
+    setIsControlling(true);
+    setControlError("");
+    try {
+      setSession(await controlGame(code, action, session.current_round));
+    } catch (error) {
+      setControlError(error instanceof Error ? error.message : "Could not update the round.");
+    } finally {
+      setIsControlling(false);
+    }
+  }
+
   async function handleStartTimer() {
-    if (!code || isStartingTimer) {
+    if (!code || controlsBusy) {
       return;
     }
 
@@ -158,6 +175,11 @@ export default function HostGameView() {
   useEffect(() => {
     const deadline = session?.round_deadline;
 
+    if (session?.game_paused) {
+      setSecondsRemaining(session.paused_remaining === null ? null : Math.ceil(session.paused_remaining));
+      return;
+    }
+
     if (!deadline || session?.phase === "finished") {
       setSecondsRemaining(null);
       return;
@@ -177,7 +199,7 @@ export default function HostGameView() {
     const intervalId = window.setInterval(updateCountdown, 250);
 
     return () => window.clearInterval(intervalId);
-  }, [session?.round_deadline, session?.phase]);
+  }, [session?.round_deadline, session?.phase, session?.game_paused, session?.paused_remaining]);
 
   const isFinished = session?.phase === "finished";
 
@@ -613,6 +635,7 @@ export default function HostGameView() {
                     Time remaining: {secondsRemaining}s
                   </p>
                 )}
+                {session.game_paused && <p role="status">Paused</p>}
 
                 <section className="host-game__controls">
                   <div className="host-game__control-heading">
@@ -639,7 +662,7 @@ export default function HostGameView() {
                         onChange={(event) =>
                           setTimerDuration(Number(event.target.value))
                         }
-                        disabled={isStartingTimer}
+                        disabled={controlsBusy || session.game_paused || session.phase !== "answering"}
                       >
                         <option value={30}>30 seconds</option>
                         <option value={60}>60 seconds</option>
@@ -660,13 +683,32 @@ export default function HostGameView() {
                         className="host-game__secondary-button"
                         onClick={handleStartTimer}
                         disabled={
-                          isStartingTimer || !session.game_started
+                          controlsBusy || session.game_paused || session.phase !== "answering"
                         }
                       >
                         {isStartingTimer
                           ? "Starting timer..."
                           : "Start round timer"}
                       </button>
+                      <button
+                        type="button"
+                        className="host-game__secondary-button"
+                        onClick={() => handleControl(session.game_paused ? "resume" : "pause")}
+                        disabled={controlsBusy || session.phase !== "answering"}
+                        aria-pressed={session.game_paused}
+                      >
+                        {session.game_paused ? "Resume" : "Pause"}
+                      </button>
+                      <button
+                        type="button"
+                        className="host-game__secondary-button"
+                        onClick={() => handleControl("extend")}
+                        disabled={controlsBusy || session.phase !== "answering" || (secondsRemaining ?? 0) <= 0}
+                      >
+                        Add 30 seconds
+                      </button>
+                      {controlError && <p className="host-game__error" role="alert">{controlError}</p>}
+                      {!hasHostAccess && <p>Use the browser where you created this game to access host controls.</p>}
                     </div>
 
                     <div className="host-game__control-card host-game__control-card--advance">
@@ -688,11 +730,11 @@ export default function HostGameView() {
                         type="button"
                         className="host-game__primary-button"
                         onClick={handleAdvanceRound}
-                        disabled={isAdvancing || !session.game_started}
+                        disabled={controlsBusy || !session.game_started}
                       >
                         {isAdvancing
                           ? "Starting next round..."
-                          : "Start next round"}
+                          : "Skip round"}
                         {!isAdvancing && (
                           <span aria-hidden="true">→</span>
                         )}

@@ -9,6 +9,7 @@ type QuipInputProps = {
   playerId: string;
   currentRound: number;
   acceptedAnswer?: string;
+  disabled?: boolean;
 };
 
 export default function QuipInput({
@@ -16,6 +17,7 @@ export default function QuipInput({
   playerId,
   currentRound,
   acceptedAnswer,
+  disabled = false,
 }: QuipInputProps) {
   const [quip, setQuip] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -32,7 +34,7 @@ export default function QuipInput({
   }
 
   async function handleSubmit() {
-    if (!isValid || isSubmitting || hasSubmitted) {
+    if (!isValid || isSubmitting || hasSubmitted || disabled) {
       return;
     }
 
@@ -40,7 +42,7 @@ export default function QuipInput({
     setMessage("");
 
     try {
-      await submitAnswer(sessionId, playerId, quip.trim());
+      await submitAnswer(sessionId, playerId, quip.trim(), currentRound);
       setSubmitted(true);
     } catch (error) {
       const session = await getSession(sessionId).catch(() => null);
@@ -73,7 +75,7 @@ export default function QuipInput({
         onChange={(event) => handleChange(event.target.value)}
         maxLength={MAX_QUIP_LENGTH}
         rows={5}
-        disabled={hasSubmitted || isSubmitting}
+        disabled={hasSubmitted || isSubmitting || disabled}
         placeholder="Type your funniest answer..."
         aria-describedby="quip-counter quip-validation"
       />
@@ -98,7 +100,7 @@ export default function QuipInput({
         type="button"
         className="quip-input__submit"
         onClick={handleSubmit}
-        disabled={!isValid || isSubmitting || hasSubmitted}
+        disabled={!isValid || isSubmitting || hasSubmitted || disabled}
       >
         {isSubmitting
           ? "Submitting..."
