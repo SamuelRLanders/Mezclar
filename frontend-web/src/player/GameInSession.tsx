@@ -1,4 +1,4 @@
-import { Link, useLocation, useParams } from "react-router-dom";
+import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 
 import { GAMES } from "../host/games";
 import GameRules from "./GameRules";
@@ -14,6 +14,7 @@ interface GameInSessionState {
 
 export default function GameInSession() {
   const { code } = useParams<{ code: string }>();
+  const navigate = useNavigate();
   const { state } = useLocation() as {
     state: GameInSessionState | null;
   };
@@ -22,11 +23,22 @@ export default function GameInSession() {
   const playerId = state?.playerId ?? (sessionId ? sessionStorage.getItem("mezclar-player:" + sessionId) : null);
 
   // No onGameStarted: the game is already running, and the server repeats
-  // game_started on every connect.
+  // game_started on every connect. round_joined means this player has been
+  // placed in a round (at the next round start, or on reconnect).
   const { playerName, gameId, players, connectionStatus, error } =
     usePlayerSocket(sessionId, playerId, {
       initialName: state?.playerName,
       initialGameId: state?.gameId,
+      onRoundJoined: (_message, connectedName) => {
+        navigate(`/player/${sessionId}/game`, {
+          state: {
+            playerId,
+            playerName: connectedName,
+            sessionId,
+            gameId,
+          },
+        });
+      },
     });
 
   const game = GAMES.find((game) => game.id === gameId);

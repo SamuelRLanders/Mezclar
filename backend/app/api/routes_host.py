@@ -1,8 +1,4 @@
-from secrets import compare_digest
-
 from backend.app.models.schemas import (
-    CreateSessionResponse,
-    GameControlRequest,
     HidePlayerRequest,
     KickPlayerRequest,
     ToggleAutoNamesRequest,
@@ -11,29 +7,23 @@ from backend.app.models.schemas import (
     SessionResponse,
     StartGameRequest,
     ModPlayerRequest,
+    StartRoundTimerRequest,
 )
-from fastapi import APIRouter, Depends, Header, HTTPException
+from fastapi import APIRouter, HTTPException
 from backend.app.sessions.registry import get_or_create_session, get_session
 from backend.app.sessions import registry
 from backend.app.api import SessionCode
-from backend.app.games.timer import broadcast_round
-from backend.app.sessions.session import Session
+import asyncio
+from datetime import datetime, timedelta, timezone
+
+from backend.app.api.voting import resume_round_after_kick, start_voting
 
 from backend.app.websockets.connection_manager import (
     connection_manager,
 )
-from backend.app.websockets.handlers import broadcast_roster
+from backend.app.websockets.handlers import broadcast_roster, send_player_prompt
 
 router = APIRouter()
-
-
-def get_host_session(session_id: str, x_host_token: str | None = Header(default=None)) -> Session:
-    session = get_session(session_id)
-    if session is None:
-        raise HTTPException(status_code=404, detail="Session not found")
-    if not x_host_token or not compare_digest(x_host_token.encode(), session.host_token.encode()):
-        raise HTTPException(status_code=403, detail="Only the host can control the game.")
-    return session
 
 @router.post("/session/{session_id}/toggle-auto-names")
 def toggle_auto_names(session_id: str, request: ToggleAutoNamesRequest) -> None:
@@ -45,15 +35,13 @@ def toggle_profanity_filter(session_id: str, request: ToggleAutoNamesRequest) ->
     session = get_or_create_session(session_id)
     session.set_profanity_filter(request.enabled)
 
-@router.post("/session", response_model=CreateSessionResponse)
-def create_session(request: CreateSessionRequest | None = None) -> CreateSessionResponse:
+@router.post("/session", response_model=SessionResponse)
+def create_session(request: CreateSessionRequest | None = None) -> SessionResponse:
     try:
         session = registry.create_session(request)
     except RuntimeError as error:
         raise HTTPException(status_code=503, detail=str(error)) from error
-    return CreateSessionResponse(
-        **get_session_info(session.session_id).model_dump(), host_token=session.host_token,
-    )
+    return get_session_info(session.session_id)
 
 @router.get("/session/{session_id}", response_model=SessionResponse)
 def get_session_info(session_id: SessionCode) -> SessionResponse:
@@ -67,16 +55,114 @@ def get_session_info(session_id: SessionCode) -> SessionResponse:
 
     players = [SessionPlayerResponse(player_id=player.player_id, name=player.name, ready=player.ready, hidden=player.hidden, is_mod=player.is_mod) for player in session.players.values()]
 
+    groups = []
+
+    if session.game_id == "quiplash" and session.game_started:
+        round_groups = session.round_groups.get(
+            session.current_round,
+            [],
+        )
+        round_prompts = session.group_prompts.get(
+            session.current_round,
+            {},
+        )
+        round_answers = session.group_answers.get(
+            session.current_round,
+            {},
+        )
+
+        
+        for group_index, player_ids in enumerate(round_groups):
+            group_players = [
+                player
+                for player in players
+                if player.player_id in player_ids
+            ]
+
+            group_answers = round_answers.get(group_index, {})
+
+            # Get votes cast in this round and group.
+            group_votes = (
+                session.group_votes
+                .get(session.current_round, {})
+                .get(group_index, {})
+            )
+
+            # Count votes received by each player's answer.
+            vote_counts = {
+                player_id: sum(
+                    1
+                    for answer_owner_id in group_votes.values()
+                    if answer_owner_id == player_id
+                )
+                for player_id in group_answers
+            }
+
+            groups.append({
+                "group_index": group_index,
+                "prompt": round_prompts.get(group_index, ""),
+                "players": group_players,
+                "answers": group_answers,
+                "vote_counts": vote_counts,
+            })
+
+    round_results = []
+
+    if session.game_id == "quiplash" and session.game_started:
+        for round_number in sorted(session.round_groups.keys()):
+            round_groups = session.round_groups.get(round_number, [])
+            round_prompts = session.group_prompts.get(round_number, {})
+            round_answers = session.group_answers.get(round_number, {})
+            round_votes = session.group_votes.get(round_number, {})
+
+            result_groups = []
+
+            for group_index, player_ids in enumerate(round_groups):
+                group_answers = round_answers.get(group_index, {})
+                group_votes = round_votes.get(group_index, {})
+
+                vote_counts = {
+                    player_id: sum(
+                        1
+                        for answer_owner_id in group_votes.values()
+                        if answer_owner_id == player_id
+                    )
+                    for player_id in group_answers
+                }
+
+                result_groups.append({
+                    "group_index": group_index,
+                    "prompt": round_prompts.get(group_index, ""),
+                    "players": [
+                        player for player in players
+                        if player.player_id in player_ids
+                    ],
+                    "answers": group_answers,
+                    "vote_counts": vote_counts,
+                })
+
+            round_results.append({
+                "round": round_number,
+                "groups": result_groups,
+            })
+
+
     return SessionResponse(
         session_id=session.session_id, player_count=len(players), players=players,
         game_started=session.game_started, host_name=session.host_name,
-        game_completed=session.game_completed,
-        game_paused=session.game_paused, remaining_seconds=session.remaining_seconds,
         settings=session.settings, auto_generate_names=session.auto_generate_names,
         allow_late_join=session.allow_late_join,
+        profanity_filter=session.use_profanity_filter,
+        requires_password=session.requires_password,
         game_id=session.game_id, minimum_players=session.minimum_players,
         maximum_players=session.maximum_players, current_round=session.current_round,
-        current_prompt=session.current_prompt, answers=session.answers
+        total_rounds=session.total_rounds,
+        current_prompt=session.current_prompt, answers=session.answers,
+        round_duration_seconds=session.round_duration_seconds, round_deadline=session.round_deadline,
+        groups=groups, phase=session.phase,
+        scores=session.scores, round_results=round_results,
+        event_log=session.event_log,
+        leaderboard=session.get_leaderboard(),
     )
 
 @router.post("/session/{session_id}/start")
@@ -103,6 +189,9 @@ async def start_game(session_id: str, request: StartGameRequest,) -> dict:
         )
 
         session.start_game()
+
+        for player_id in session.players:
+            await send_player_prompt(session, player_id)
 
     except ValueError as error:
         raise HTTPException(
@@ -136,6 +225,9 @@ async def kick_player(session_id: str, request: KickPlayerRequest) -> dict:
             detail="Session not found",
         )
 
+    # Checked before the kick, which removes the player from the round's groups.
+    was_in_round = session.is_player_in_current_round(request.player_id)
+
     try:
         session.kick_player(request.player_id)
     except ValueError as error:
@@ -150,6 +242,9 @@ async def kick_player(session_id: str, request: KickPlayerRequest) -> dict:
     )
     await connection_manager.disconnect_player(session_id, request.player_id)
     await broadcast_roster(session)
+
+    if was_in_round and session.game_id == "quiplash":
+        await resume_round_after_kick(session)
 
     return { "session_id": session.session_id }
 
@@ -175,41 +270,6 @@ async def hide_player(session_id: str, request: HidePlayerRequest) -> SessionPla
 
     return SessionPlayerResponse(player_id = player.player_id, name = player.name, ready = player.ready, hidden = player.hidden, is_mod = player.is_mod)
 
-@router.post("/session/{session_id}/control", response_model=SessionResponse)
-async def control_game(request: GameControlRequest, session: Session = Depends(get_host_session)) -> SessionResponse:
-    try:
-        session.control_game(request.action, request.current_round)
-    except ValueError as error:
-        raise HTTPException(status_code=400, detail=str(error)) from error
-    await broadcast_round(session)
-    return get_session_info(session.session_id)
-
-
-@router.post("/session/{session_id}/advance-round", dependencies=[Depends(get_host_session)])
-async def advance_round(session_id: str) -> dict[str, str | int]:
-    session = get_session(session_id)
-
-    if not session:
-        raise HTTPException(
-            status_code=404,
-            detail="Session not found",
-        )
-    try:
-        session.advance_round()
-    except ValueError as error:
-        raise HTTPException(
-            status_code=400,
-            detail=str(error),
-        )
-
-    await broadcast_round(session)
-
-    return {
-        "session_id": session.session_id,
-        "current_round": session.current_round,
-        "current_prompt": session.current_prompt or "",
-    }
-
 @router.post("/session/{session_id}/mod")
 async def mod_player(session_id: str, request: ModPlayerRequest) -> SessionPlayerResponse:
     session = get_session(session_id)
@@ -218,9 +278,222 @@ async def mod_player(session_id: str, request: ModPlayerRequest) -> SessionPlaye
             status_code=404,
             detail="Session not found",
         )
-
     player = session.mod_player(request.player_id, request.is_mod)
 
     await broadcast_roster(session)
 
     return SessionPlayerResponse(player_id = player.player_id, name = player.name, ready = player.ready, hidden = player.hidden, is_mod = player.is_mod)
+
+
+
+
+@router.post("/session/{session_id}/advance-round")
+async def advance_round(session_id: str) -> dict[str, str | int]:
+    session = get_session(session_id)
+
+    if not session:
+        raise HTTPException(
+            status_code=404,
+            detail="Session not found",
+        )
+
+    # Remember whether the current round has an active timer.
+    timer_was_active = (
+        session.round_deadline is not None
+        and session.round_duration_seconds is not None
+    )
+
+    # Advance to the next round or transition to the finished phase.
+    try:
+        inserted_players = session.advance_round()
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error))
+
+    # Cancel the old timer after successfully advancing.
+    if session.round_timer_task is not None:
+        session.round_timer_task.cancel()
+        session.round_timer_task = None
+
+    session.round_deadline = None
+
+    if session.phase == "finished":
+        await connection_manager.broadcast_to_session(
+            session.session_id,
+            {
+                "type": "game_finished",
+                "session_id": session.session_id,
+            },
+        )
+
+        return {
+            "session_id": session.session_id,
+            "current_round": session.current_round,
+            "current_prompt": session.current_prompt or "",
+            "phase": "finished",
+        }
+
+    # Start a fresh timer for the new round if the previous round used one.
+    if timer_was_active:
+        deadline = datetime.now(timezone.utc) + timedelta(
+            seconds=session.round_duration_seconds
+        )
+        session.round_deadline = deadline
+        session.round_timer_task = asyncio.create_task(
+            run_round_timer(session, session.current_round, deadline)
+        )
+
+    await connection_manager.broadcast_to_session(
+        session.session_id,
+        {
+            "type": "round_updated",
+            "session_id": session.session_id,
+            "current_round": session.current_round,
+            "current_prompt": session.current_prompt,
+            "round_duration_seconds": session.round_duration_seconds,
+            "round_deadline": (
+                session.round_deadline.isoformat()
+                if session.round_deadline is not None
+                else None
+            ),
+        },
+    )
+
+    for player_id in session.players:
+        await send_player_prompt(session, player_id)
+
+    # Move late joiners off the waiting page now that they're in this round.
+    for player_id in inserted_players:
+        await connection_manager.send_to_player(
+            session.session_id,
+            player_id,
+            {
+                "type": "round_joined",
+                "session_id": session.session_id,
+                "current_round": session.current_round,
+            },
+        )
+
+    return {
+        "session_id": session.session_id,
+        "current_round": session.current_round,
+        "current_prompt": session.current_prompt or "",
+    }
+
+async def run_round_timer(session, round_number: int, deadline: datetime) -> None:
+    try:
+        remaining = (deadline - datetime.now(timezone.utc)).total_seconds()
+        await asyncio.sleep(max(0, remaining))
+
+        # Ignore this task if the round or timer has since changed.
+        if (
+            not session.game_started
+            or session.current_round != round_number
+            or session.round_deadline != deadline
+        ):
+            return
+
+        # Fill in missing answers in each player's assigned group.
+        groups = session.round_groups.get(round_number, [])
+        round_answers = session.group_answers.setdefault(round_number, {})
+
+        for group_index, group in enumerate(groups):
+            group_answers = round_answers.setdefault(group_index, {})
+            for player_id in group:
+                if player_id not in group_answers:
+                    group_answers[player_id] = "No answer submitted (time expired)"
+
+        session.round_deadline = None
+        session.round_timer_task = None
+
+        await start_voting(session, round_number)
+
+        # if session.current_round >= session.total_rounds:
+        #     await connection_manager.broadcast_to_session(
+        #         session.session_id,
+        #         {
+        #             "type": "round_timer_expired",
+        #             "session_id": session.session_id,
+        #             "current_round": session.current_round,
+        #             "answers": session.answers,
+        #         },
+        #     )
+        #     return
+
+        # session.advance_round()
+
+        # # Automatically time the next round using the same duration.
+        # next_deadline = datetime.now(timezone.utc) + timedelta(
+        #     seconds=session.round_duration_seconds
+        # )
+        # session.round_deadline = next_deadline
+        # session.round_timer_task = asyncio.create_task(
+        #     run_round_timer(session, session.current_round, next_deadline)
+        # )
+
+        # await connection_manager.broadcast_to_session(
+        #     session.session_id,
+        #     {
+        #         "type": "round_updated",
+        #         "session_id": session.session_id,
+        #         "current_round": session.current_round,
+        #         "current_prompt": session.current_prompt,
+        #         "round_duration_seconds": session.round_duration_seconds,
+        #         "round_deadline": next_deadline.isoformat(),
+        #     },
+        # )
+
+        # for player_id in session.players:
+        #     await send_player_prompt(session, player_id)
+
+    except asyncio.CancelledError:
+        # A host action can cancel this timer when changing rounds.
+        raise
+
+@router.post("/session/{session_id}/start-timer")
+async def start_round_timer(
+    session_id: str,
+    request: StartRoundTimerRequest,
+) -> dict[str, str]:
+    session = get_session(session_id)
+
+    if session is None:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    if not session.game_started:
+        raise HTTPException(status_code=400, detail="The game has not started.")
+
+    if session.game_id != "quiplash":
+        raise HTTPException(status_code=400, detail="This game does not support round timers.")
+
+    if not 10 <= request.duration_seconds <= 300:
+        raise HTTPException(
+            status_code=400,
+            detail="Timer duration must be between 10 and 300 seconds.",
+        )
+
+    # Cancel any existing timer for this session.
+    if session.round_timer_task is not None:
+        session.round_timer_task.cancel()
+
+    session.round_duration_seconds = request.duration_seconds
+    deadline = datetime.now(timezone.utc) + timedelta(
+        seconds=request.duration_seconds
+    )
+    session.round_deadline = deadline
+    session.round_timer_task = asyncio.create_task(
+        run_round_timer(session, session.current_round, deadline)
+    )
+
+    await connection_manager.broadcast_to_session(
+        session.session_id,
+        {
+            "type": "round_updated",
+            "session_id": session.session_id,
+            "current_round": session.current_round,
+            "current_prompt": session.current_prompt,
+            "round_duration_seconds": session.round_duration_seconds,
+            "round_deadline": deadline.isoformat(),
+        },
+    )
+
+    return {"message": "Round timer started."}

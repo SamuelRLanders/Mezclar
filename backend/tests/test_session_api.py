@@ -55,7 +55,8 @@ def test_sessions_do_not_share_mutable_data():
     first, second = registry.create_session(request), registry.create_session(request)
     first.settings["round"]["duration"] = 60
     first.add_player("player1", "Taylor")
-    assert second.settings == request.settings == {"round": {"duration": 30}}
+    # The request validator fills in the default round count.
+    assert second.settings == request.settings == {"round": {"duration": 30}, "rounds": 3}
     assert second.players == {}
 
 def test_concurrent_creation_keeps_all_sessions():

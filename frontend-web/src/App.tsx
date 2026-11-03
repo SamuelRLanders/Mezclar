@@ -6,8 +6,8 @@ import CreateGame from "./host/CreateGame";
 import LobbyView from "./host/LobbyView";
 import PlayerLobby from "./player/PlayerLobby";
 import GameLanding from "./player/GameLanding";
-import HostGameView from "./host/HostGameView";
 import GameInSession from "./player/GameInSession";
+import HostGameView from "./host/HostGameView";
 
 export default function App() {
   return (

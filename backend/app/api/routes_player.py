@@ -1,4 +1,3 @@
-from httpx import request
 
 from backend.app.models.schemas import (
     GenerateNameResponse, 
@@ -8,12 +7,15 @@ from backend.app.models.schemas import (
     SubmitNameRequest,
     UpdateReadyStatusRequest,
     SessionPlayerResponse,
-    SubmitAnswerRequest
+    SubmitAnswerRequest,
+    SubmitVoteRequest
 )
 
 from fastapi import APIRouter, HTTPException
 from backend.app.sessions.registry import get_or_create_session, get_session
 from backend.app.naming.generator import generate_unique_name, validate_name
+
+from backend.app.api.voting import start_voting
 
 router = APIRouter()
 
@@ -35,20 +37,37 @@ def submit_name(session_id: str, request: SubmitNameRequest) -> GenerateNameResp
         raise HTTPException(status_code=400, detail=str(e))
     return GenerateNameResponse(name=name)
 
+def validate_password(session, password: str | None) -> None:
+    if session.password is not None and session.password != password:
+        raise HTTPException(
+            status_code=403,
+            detail="Incorrect password for this session.",
+        )
+
 @router.post("/session/{session_id}/join", response_model=JoinSessionResponse)
 def join_session(
     session_id: str,
     request: JoinSessionRequest
 ) -> JoinSessionResponse:
     session = get_session(session_id)
-
     if not session:
         raise HTTPException(
             status_code=404,
             detail="Session not found",
         )
-    if session.use_profanity_filter:
-        valid = validate_name(request.name)
+    if session.is_banned(request.player_id, request.device_token):
+        raise HTTPException(
+            status_code=403,
+            detail="You were removed from this session and can't rejoin it.",
+        )
+    if session.password is not None:
+        validate_password(session, request.password)
+
+    # With auto-generated names on, players can't pick their own.
+    requested_name = None if session.auto_generate_names else request.name
+
+    if session.use_profanity_filter and requested_name is not None:
+        valid = validate_name(requested_name)
         if not valid:
             raise HTTPException(
                 status_code=400,
@@ -74,11 +93,32 @@ def join_session(
             detail="This game is already in progress and isn't accepting new players.",
         )
 
-    try:
-        player = session.add_player(
-            player_id=request.player_id,
-            requested_name=request.name,
+    if session.is_last_round():
+        raise HTTPException(
+            status_code=403,
+            detail="This game is in its last round, so it's too late to join.",
         )
+
+    try:
+        if session.game_started:
+            player = session.add_late_player(
+                player_id=request.player_id,
+                requested_name=requested_name,
+                device_token=request.device_token,
+            )
+            session.log_event(
+                "player_joined_late",
+                "joined late and is waiting for the next round"
+                if session.game_id == "quiplash" else "joined late",
+                player,
+            )
+        else:
+            player = session.add_player(
+                player_id=request.player_id,
+                requested_name=requested_name,
+                device_token=request.device_token,
+            )
+            session.log_event("player_joined", "joined the lobby", player)
     except ValueError as error:
         raise HTTPException(
             status_code=400,
@@ -98,7 +138,6 @@ def update_ready_status(session_id: str, player_id: str, request: UpdateReadySta
         raise HTTPException(status_code=404, detail=str(error)) from error
     return SessionPlayerResponse(player_id=player.player_id, name=player.name, ready=player.ready, hidden=player.hidden, is_mod=player.is_mod)
 
-# Keep submissions on the timer's event loop so pauses and round changes are atomic.
 @router.post("/session/{session_id}/submit-answer")
 async def submit_answer(
     session_id: str,
@@ -113,11 +152,44 @@ async def submit_answer(
         )
 
     try:
-        session.submit_answer(request.player_id, request.answer, request.current_round)
+        session.submit_answer(request.player_id, request.answer)
     except ValueError as error:
         raise HTTPException(
             status_code=400,
             detail=str(error),
         )
 
+    print("Submit!")
+
+    if session.all_players_submitted(session.current_round):
+        print("All Players Submitted!")
+        await start_voting(session, session.current_round)
+
     return {"message": "Answer submitted successfully."}
+
+@router.post("/session/{session_id}/submit-vote")
+def submit_vote(
+    session_id: str,
+    request: SubmitVoteRequest,
+) -> dict[str, str]:
+    session = get_session(session_id)
+
+    if session is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Session not found",
+        )
+
+    try:
+        session.submit_vote(
+            voter_id=request.voter_id,
+            group_index=request.group_index,
+            answer_owner_id=request.answer_owner_id,
+        )
+    except ValueError as error:
+        raise HTTPException(
+            status_code=400,
+            detail=str(error),
+        )
+
+    return {"message": "Vote submitted successfully."}

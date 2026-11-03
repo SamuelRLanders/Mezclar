@@ -1,42 +1,97 @@
 from copy import deepcopy
-from secrets import token_urlsafe
-from time import monotonic
 from pydantic import JsonValue
+
+import asyncio
+from datetime import datetime, timedelta, timezone
+
+import random
+
+from math import ceil, sqrt
 
 from backend.app.naming.generator import generate_unique_name, validate_name
 from backend.app.sessions.player import Player
 from backend.app.games.quiplash.prompts import QUIPLASH_PROMPTS
 
-ROUND_SECONDS = 60
+MAX_EVENT_LOG = 100
 
 class Session:
-    def __init__(self, session_id: str, host_name: str = "Host", settings: dict[str, JsonValue] | None = None):
+    def __init__(self, session_id: str, host_name: str = "Host", settings: dict[str, JsonValue] | None = None, password: str | None = None):
         self.session_id = session_id
         self.host_name = host_name
-        self.host_token = token_urlsafe(32)
         self.settings = deepcopy(settings) if settings is not None else {}
+        self.password = password
 
         self.players: dict[str, "Player"] = {}
 
         options = self.settings.get("options", {})
+        self.total_rounds: int = self.settings.get("rounds", 3)
         self.auto_generate_names: bool = isinstance(options, dict) and options.get("autoGenerateNames") is True
         self.used_names: set[str] = set()
         self.use_profanity_filter: bool = isinstance(options, dict) and options.get("useProfanityFilter") is True
         self.allow_late_join: bool = isinstance(options, dict) and options.get("allowLateJoin") is True
+        self.requires_password: bool = isinstance(options, dict) and options.get("requiresPassword") is True
 
         # Game configuration
         self.game_id: str | None = None
         self.minimum_players: int | None = None
         self.maximum_players: int | None = None
         self.game_started: bool = False
-        self.game_completed: bool = False
-        self.game_paused: bool = False
-        self.round_deadline: float | None = None
-        self.paused_remaining: float = 0
         # Gameplay state
         self.current_round: int = 0
         self.current_prompt: str | None = None
         self.answers: dict[str, str] = {}
+
+        # Players who joined mid-game and are waiting for the next round to start.
+        self.waiting_players: list[str] = []
+
+        # Subgroup assignments for each submission round.
+        # Round number -> list of groups -> player IDs.
+        self.round_groups: dict[int, list[list[str]]] = {}
+
+        # Answers grouped by round and prompt-group index.
+        # Round -> group index -> player ID -> answer.
+        self.group_answers: dict[int, dict[int, dict[str, str]]] = {}
+
+        # Votes grouped by round and prompt group.
+        # Round -> group index -> voter ID -> answer owner's player ID.
+        self.group_votes: dict[int, dict[int, dict[str, str]]] = {}
+
+        # Total points earned by each player.
+        self.scores: dict[str, int] = {}
+
+        # Round -> group index -> prompt.
+        self.group_prompts: dict[int, dict[int, str]] = {}
+
+        # Round timer state
+        self.round_duration_seconds: int | None = None
+        self.round_deadline: datetime | None = None
+        self.round_timer_task: asyncio.Task | None = None
+
+        self.phase: str = "lobby"
+
+        # Recent events shown in the host's game log.
+        self.event_log: list[dict] = []
+        self._next_event_id: int = 1
+
+        # Players whose disconnect was logged, so their reconnect can be logged too.
+        self.disconnected_players: set[str] = set()
+
+        # Kicked players are banned by device token and by player ID; checked on every join.
+        self.banned_tokens: set[str] = set()
+        self.banned_player_ids: set[str] = set()
+
+    def log_event(self, event_type: str, message: str, player: Player | None = None) -> None:
+        """Record something the host should see in the game log."""
+        self.event_log.append({
+            "id": self._next_event_id,
+            "timestamp": datetime.now(timezone.utc),
+            "type": event_type,
+            "player_id": player.player_id if player else None,
+            "player_name": player.name if player else None,
+            "message": message,
+        })
+        self._next_event_id += 1
+        del self.event_log[:-MAX_EVENT_LOG]
 
     def set_auto_generate(self, enabled: bool) -> None:
         self.auto_generate_names = enabled
@@ -71,41 +126,125 @@ class Session:
 
         raise ValueError("Name must be provided or auto-generation must be enabled.")
 
-    def add_player(self, player_id: str, requested_name: str | None = None) -> Player:
+    def add_player(self, player_id: str, requested_name: str | None = None, device_token: str | None = None) -> Player:
         name = self.assign_name(requested_name)
-        player = Player(player_id, name)
+        player = Player(player_id, name, device_token)
         self.players[player_id] = player
         return player
+
+    def is_banned(self, player_id: str, device_token: str | None) -> bool:
+        return player_id in self.banned_player_ids or (
+            device_token is not None and device_token in self.banned_tokens
+        )
 
     def remove_player(self, player_id: str) -> None:
         if player_id in self.players:
             player = self.players.pop(player_id)
             self.remove_used_name(player.name)
+        if player_id in self.waiting_players:
+            self.waiting_players.remove(player_id)
+        self.disconnected_players.discard(player_id)
 
     def get_player(self, player_id: str) -> Player | None:
         return self.players.get(player_id)
 
-    @property
-    def remaining_seconds(self) -> float:
-        if self.round_deadline is None:
-            return self.paused_remaining
-        return max(0, self.round_deadline - monotonic())
+    
+    def get_player_group_index(self, round_number: int, player_id: str) -> int:
+        """Return the index of the group containing a player in a round."""
+        groups = self.round_groups.get(round_number)
 
-    def submit_answer(self, player_id: str, answer: str, current_round: int) -> None:
-        if self.game_completed:
-            raise ValueError("The game has finished.")
+        if groups is None:
+            raise ValueError("Groups have not been generated for this round.")
 
+        for group_index, group in enumerate(groups):
+            if player_id in group:
+                return group_index
+
+        raise ValueError("Player is not assigned to a group in this round.")
+
+    def is_last_round(self) -> bool:
+        """Return whether a Quiplash game is in (or past) its final round."""
+        return (
+            self.game_started
+            and self.game_id == "quiplash"
+            and self.current_round >= self.total_rounds
+        )
+
+    def is_player_in_current_round(self, player_id: str) -> bool:
+        groups = self.round_groups.get(self.current_round, [])
+        return any(player_id in group for group in groups)
+
+    def add_late_player(self, player_id: str, requested_name: str | None = None, device_token: str | None = None) -> Player:
+        """Add a player mid-game; Quiplash players wait until the next round starts."""
+        player = self.add_player(player_id, requested_name, device_token)
+        if self.game_id == "quiplash":
+            self.waiting_players.append(player_id)
+        return player
+
+    def insert_waiting_players(self) -> list[str]:
+        """Place waiting players into the current and remaining rounds' groups."""
+        inserted = list(self.waiting_players)
+
+        for player_id in inserted:
+            for round_number in range(self.current_round, self.total_rounds + 1):
+                groups = self.round_groups.get(round_number)
+                if not groups:
+                    continue
+
+                # Join the smallest group so group sizes stay balanced.
+                smallest = min(len(group) for group in groups)
+                candidates = [group for group in groups if len(group) == smallest]
+                random.choice(candidates).append(player_id)
+
+            self.scores.setdefault(player_id, 0)
+            self.log_event(
+                "player_inserted",
+                f"jumped in at round {self.current_round}",
+                self.players[player_id],
+            )
+
+        self.waiting_players.clear()
+        return inserted
+
+    def get_leaderboard(self) -> list[dict]:
+        """Rank current players by score; ties share a rank and keep join order."""
+        ordered = sorted(
+            self.players.values(),
+            key=lambda player: -self.scores.get(player.player_id, 0),
+        )
+
+        leaderboard = []
+        rank = 0
+        previous_score = None
+
+        for position, player in enumerate(ordered, start=1):
+            score = self.scores.get(player.player_id, 0)
+            if score != previous_score:
+                rank = position
+                previous_score = score
+
+            leaderboard.append({
+                "player_id": player.player_id,
+                "name": player.name,
+                "hidden": player.hidden,
+                "score": score,
+                "rank": rank,
+                "waiting": player.player_id in self.waiting_players,
+            })
+
+        return leaderboard
+
+        
+    def submit_answer(self, player_id: str, answer: str) -> None:
         if not self.game_started:
             raise ValueError("The game has not started.")
 
         if self.game_id != "quiplash":
             raise ValueError("This game does not accept quip answers.")
 
-        if self.game_paused:
-            raise ValueError("The game is paused.")
-
-        if current_round != self.current_round or self.remaining_seconds <= 0:
-            raise ValueError("This round has ended.")
+        # Voting and finished games are closed; an answer then would change what people vote on.
+        if self.phase != "answering":
+            raise ValueError("Answers are closed for this round.")
 
         if self.get_player(player_id) is None:
             raise ValueError("Player not found.")
@@ -116,7 +255,114 @@ class Session:
         if len(answer) > 200:
             raise ValueError("Answer cannot exceed 200 characters.")
 
-        self.answers[player_id] = answer
+        if self.use_profanity_filter:
+            valid = validate_name(answer)
+            if not valid:
+                raise ValueError("Answer contains inappropriate content.")
+
+        round_number = self.current_round
+
+        if round_number not in self.round_groups:
+            raise ValueError("Groups have not been generated for this round.")
+
+        group_index = self.get_player_group_index(round_number, player_id)
+
+        round_answers = self.group_answers.setdefault(round_number, {})
+        group_answers = round_answers.setdefault(group_index, {})
+
+        # One accepted answer per player per round; the first one stands.
+        if player_id in group_answers:
+            raise ValueError("You already submitted an answer this round.")
+
+        group_answers[player_id] = answer
+
+    def submit_vote(
+        self,
+        voter_id: str,
+        group_index: int,
+        answer_owner_id: str,
+    ) -> None:
+        if self.phase != "voting":
+            raise ValueError("Voting is not currently open.")
+
+        round_number = self.current_round
+
+        if voter_id not in self.players:
+            raise ValueError("Voter is not in this session.")
+
+        # Votes for a kicked player's answer are dropped quietly; nobody gets the point.
+        if answer_owner_id in self.banned_player_ids:
+            return
+
+        if answer_owner_id not in self.players:
+            raise ValueError("Answer owner is not in this session.")
+
+        groups = self.round_groups.get(round_number, [])
+
+        if group_index < 0 or group_index >= len(groups):
+            raise ValueError("Invalid group.")
+
+        # Find the voter's group and the answer owner's group.
+        voter_group_index = self.get_player_group_index(
+            round_number,
+            voter_id,
+        )
+        owner_group_index = self.get_player_group_index(
+            round_number,
+            answer_owner_id,
+        )
+
+        if voter_group_index is None or owner_group_index is None:
+            raise ValueError("Player is not assigned to a group.")
+
+        # Players cannot vote on their own group's answers.
+        if group_index == voter_group_index:
+            raise ValueError("You cannot vote in your own group.")
+
+        # The answer must belong to the group being voted on.
+        if owner_group_index != group_index:
+            raise ValueError("That answer is not in the selected group.")
+
+        if voter_id == answer_owner_id:
+            raise ValueError("You cannot vote for your own answer.")
+
+        group_answers = self.group_answers.get(
+            round_number, {}
+        ).get(group_index, {})
+
+        if answer_owner_id not in group_answers:
+            raise ValueError("That player has no answer to vote for.")
+
+        # Store the vote under the TARGET group, not the voter's group.
+        round_votes = self.group_votes.setdefault(round_number, {})
+        group_votes = round_votes.setdefault(group_index, {})
+
+        if voter_id in group_votes:
+            raise ValueError("You have already voted in this group.")
+
+        group_votes[voter_id] = answer_owner_id
+        self.scores[answer_owner_id] = (
+            self.scores.get(answer_owner_id, 0) + 1
+        )
+
+    def all_players_submitted(self, round_number: int) -> bool:
+        """Return whether every player assigned to this round submitted an answer."""
+        groups = self.round_groups.get(round_number)
+
+        if groups is None:
+            raise ValueError("Groups have not been generated for this round.")
+
+        round_answers = self.group_answers.get(round_number, {})
+
+        for group_index, group in enumerate(groups):
+            submitted = round_answers.get(group_index, {})
+
+            for player_id in group:
+                if player_id not in submitted:
+                    return False
+
+        return True
+
 
     def configure_game(self, game_id: str, minimum_players: int, maximum_players: int) -> None:
         if self.game_started:
@@ -160,6 +406,21 @@ class Session:
             and player_count <= self.maximum_players
         )
 
+    # def start_game(self) -> None:
+    #     if self.game_started:
+    #         raise ValueError("Game has already started.")
+
+    #     if not self.can_start_game():
+    #         raise ValueError(
+    #             "Game cannot start because the start conditions "
+    #             "have not been met."
+    #         )
+
+    #     self.current_prompt = QUIPLASH_PROMPTS[0]
+    #     self.current_round = 1
+    #     self.game_started = True
+
+    
     def start_game(self) -> None:
         if self.game_started:
             raise ValueError("Game has already started.")
@@ -170,11 +431,22 @@ class Session:
                 "have not been met."
             )
 
-        self.current_prompt = QUIPLASH_PROMPTS[0]
-        self.current_round = 1
-        self.game_started = True
         if self.game_id == "quiplash":
-            self.round_deadline = monotonic() + ROUND_SECONDS
+            self.generate_round_groups()
+            self.assign_group_prompts()
+
+            self.current_round = 1
+            self.current_prompt = next(
+                iter(self.group_prompts[self.current_round].values())
+            )
+        else:
+            self.current_prompt = QUIPLASH_PROMPTS[0]
+            self.current_round = 1
+
+        self.game_started = True
+        self.phase = "answering"
+        self.log_event("game_started", "The game started.")
+
 
     def regenerate_name(self, player_id: str) -> str: 
         player = self.get_player(player_id)
@@ -197,7 +469,26 @@ class Session:
         player = self.get_player(player_id)
         if player is None:
             raise ValueError(f"Player with ID {player_id} does not exist.")
+        self.log_event("player_kicked", "was kicked", player)
+        self.banned_player_ids.add(player_id)
+        if player.device_token is not None:
+            self.banned_tokens.add(player.device_token)
+        self.remove_player_from_rounds(player_id)
         self.remove_player(player.player_id)
+
+    def remove_player_from_rounds(self, player_id: str) -> None:
+        """Drop a player from the current and upcoming rounds so nobody waits on them."""
+        for round_number, groups in self.round_groups.items():
+            # Past rounds stay intact for the results history.
+            if round_number < self.current_round:
+                continue
+            for group in groups:
+                if player_id in group:
+                    group.remove(player_id)
+
+        # Their current-round answer shouldn't be voted on after they're gone.
+        for group_answers in self.group_answers.get(self.current_round, {}).values():
+            group_answers.pop(player_id, None)
 
     def hide_player(self, player_id: str, hidden: bool = True) -> Player:
         player = self.get_player(player_id)
@@ -206,10 +497,24 @@ class Session:
         player.hidden = hidden
         return player
 
-    def advance_round(self) -> None:
-        if self.game_completed:
-            raise ValueError("The game has finished.")
+    # def advance_round(self) -> None:
+    #     if not self.game_started:
+    #         raise ValueError("The game has not started.")
 
+    #     if self.game_id != "quiplash":
+    #         raise ValueError("This game does not support rounds.")
+
+    #     next_round = self.current_round + 1
+
+    #     if next_round > self.total_rounds:
+    #         raise ValueError("There are no more rounds.")
+
+    #     self.current_round = next_round
+    #     self.current_prompt = QUIPLASH_PROMPTS[next_round - 1]
+    #     self.answers.clear()
+
+    
+    def advance_round(self) -> list[str]:
         if not self.game_started:
             raise ValueError("The game has not started.")
 
@@ -217,51 +522,29 @@ class Session:
             raise ValueError("This game does not support rounds.")
 
         next_round = self.current_round + 1
-        self.game_paused = False
-        self.paused_remaining = 0
 
-        if next_round > len(QUIPLASH_PROMPTS):
-            self.game_completed = True
-            self.round_deadline = None
-            return
+        if next_round > self.total_rounds:
+            # Pressing advance again after the end shouldn't log a second finish.
+            if self.phase != "finished":
+                self.log_event("game_finished", "The game finished.")
+            self.phase = "finished"
+            return []
+
+        if next_round not in self.group_prompts:
+            raise ValueError("Prompts have not been assigned for the next round.")
 
         self.current_round = next_round
-        self.current_prompt = QUIPLASH_PROMPTS[next_round - 1]
+        self.phase = "answering"
+        self.log_event("round_started", f"Round {next_round} started.")
+
+        # Keep a default prompt temporarily for compatibility with existing routes.
+        self.current_prompt = next(iter(self.group_prompts[next_round].values()))
+
+        # Do not clear group_answers: previous rounds' answers must remain available.
         self.answers.clear()
-        self.round_deadline = monotonic() + ROUND_SECONDS
 
-    def control_game(self, action: str, current_round: int) -> None:
-        if not self.game_started or self.game_completed:
-            raise ValueError("The game is not running.")
-        if self.game_id != "quiplash":
-            raise ValueError("This game does not support round controls.")
-        if current_round != self.current_round:
-            raise ValueError("The round has changed. Refresh before trying again.")
-        if action == "skip":
-            self.advance_round()
-            return
-        if self.remaining_seconds <= 0:
-            raise ValueError("This round has ended.")
+        return self.insert_waiting_players()
 
-        if action == "pause":
-            if self.game_paused:
-                raise ValueError("The game is already paused.")
-            self.paused_remaining = self.remaining_seconds
-            self.round_deadline = None
-            self.game_paused = True
-        elif action == "resume":
-            if not self.game_paused:
-                raise ValueError("The game is not paused.")
-            self.round_deadline = monotonic() + self.paused_remaining
-            self.paused_remaining = 0
-            self.game_paused = False
-        elif action == "extend":
-            if self.game_paused:
-                self.paused_remaining += 30
-            else:
-                self.round_deadline += 30
-        else:
-            raise ValueError("Unknown game control.")
 
     def mod_player(self, player_id: str, is_mod: bool) -> Player:
         player = self.get_player(player_id)
@@ -269,3 +552,122 @@ class Session:
             raise ValueError(f"Player with ID {player_id} does not exist.")
         player.is_mod = is_mod
         return player
+
+    
+    
+    
+    def generate_round_groups(self) -> dict[int, list[list[str]]]:
+        """Generate balanced groups while minimizing repeated pairings."""
+        player_ids = list(self.players.keys())
+        player_count = len(player_ids)
+
+        if player_count < 2:
+            raise ValueError("At least two players are needed to form groups.")
+
+        if self.total_rounds < 1:
+            raise ValueError("At least one round is required.")
+
+        if self.total_rounds > 5:
+            raise ValueError("A maximum of five rounds is supported.")
+
+        # Calculate the maximum feasible number of groups.
+        max_groups_by_players = player_count // 2
+        max_groups_by_prompts = len(QUIPLASH_PROMPTS) // self.total_rounds
+
+        if max_groups_by_prompts < 1:
+            raise ValueError("Not enough unique prompts for the selected rounds.")
+
+        # Favor groups of two while respecting prompt availability.
+        group_count = min(
+            max_groups_by_players,
+            max_groups_by_prompts,
+        )
+
+        groups_by_round: dict[int, list[list[str]]] = {}
+        previous_pairings: dict[tuple[str, str], int] = {}
+
+        for round_number in range(1, self.total_rounds + 1):
+            best_groups = None
+            best_score = float("inf")
+
+            # Search randomized arrangements to minimize repeated pairings.
+            for _ in range(500):
+                shuffled = player_ids.copy()
+                random.shuffle(shuffled)
+
+                groups = [[] for _ in range(group_count)]
+
+                # Distribute players as evenly as possible.
+                for index, player_id in enumerate(shuffled):
+                    groups[index % group_count].append(player_id)
+
+                # Penalize pairings based on how often they have occurred.
+                score = sum(
+                    1 + previous_pairings.get(
+                        tuple(sorted((player_a, player_b))), 0
+                    )
+                    for group in groups
+                    for i, player_a in enumerate(group)
+                    for player_b in group[i + 1:]
+                )
+
+                if score < best_score:
+                    best_score = score
+                    best_groups = groups
+
+                # Stop early if this arrangement introduces no repeated pairs.
+                if all(
+                    previous_pairings.get(
+                        tuple(sorted((player_a, player_b))), 0
+                    ) == 0
+                    for group in groups
+                    for i, player_a in enumerate(group)
+                    for player_b in group[i + 1:]
+                ):
+                    break
+
+            assert best_groups is not None
+            groups_by_round[round_number] = best_groups
+
+            # Record pairings for use when generating subsequent rounds.
+            for group in best_groups:
+                for i, player_a in enumerate(group):
+                    for player_b in group[i + 1:]:
+                        pairing = tuple(sorted((player_a, player_b)))
+                        previous_pairings[pairing] = (
+                            previous_pairings.get(pairing, 0) + 1
+                        )
+
+        self.round_groups = groups_by_round
+        return groups_by_round
+
+
+
+    
+    def assign_group_prompts(self) -> dict[int, dict[int, str]]:
+        """Assign a distinct prompt to each group, avoiding reuse when possible."""
+        prompts = QUIPLASH_PROMPTS.copy()
+        random.shuffle(prompts)
+
+        required_prompts = sum(
+            len(groups) for groups in self.round_groups.values()
+        )
+
+        if required_prompts > len(prompts):
+            raise ValueError(
+                "Not enough unique prompts for all groups across all rounds."
+            )
+
+        group_prompts: dict[int, dict[int, str]] = {}
+        prompt_index = 0
+
+        for round_number, groups in self.round_groups.items():
+            group_prompts[round_number] = {}
+
+            for group_index, _group in enumerate(groups):
+                group_prompts[round_number][group_index] = prompts[prompt_index]
+                prompt_index += 1
+
+        self.group_prompts = group_prompts
+        return group_prompts
+

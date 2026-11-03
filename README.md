@@ -19,6 +19,6 @@ Early development — the real-time lobby and core multiplayer infrastructure ar
 - Frontend
   - cd into frontend-web and do "npm run dev"
 - Backend
-  - Run ".\backend\.venv\Scripts\python.exe -m uvicorn backend.main:app --reload --port 8000"
+  - Run ".\backend\\.venv\Scripts\python.exe -m uvicorn backend.main:app --reload --port 8000"
 - Tests
-  - Run ".\backend\.venv\Scripts\python.exe -m pytest backend/tests -q"
+  - Run ".\backend\\.venv\Scripts\python.exe -m pytest backend/tests -q"

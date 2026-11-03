@@ -1,21 +1,17 @@
-
 import { useState } from "react";
 import { submitAnswer } from "../api/client";
+import "./QuipInput.css";
 
 const MAX_QUIP_LENGTH = 200;
 
 type QuipInputProps = {
   sessionId: string;
   playerId: string;
-  currentRound: number;
-  disabled: boolean;
 };
 
 export default function QuipInput({
   sessionId,
   playerId,
-  currentRound,
-  disabled,
 }: QuipInputProps) {
   const [quip, setQuip] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -30,7 +26,7 @@ export default function QuipInput({
   }
 
   async function handleSubmit() {
-    if (!isValid || isSubmitting || hasSubmitted || disabled) {
+    if (!isValid || isSubmitting || hasSubmitted) {
       return;
     }
 
@@ -38,7 +34,7 @@ export default function QuipInput({
     setMessage("");
 
     try {
-      await submitAnswer(sessionId, playerId, quip.trim(), currentRound);
+      await submitAnswer(sessionId, playerId, quip.trim());
       setHasSubmitted(true);
       setMessage("Your quip was submitted!");
     } catch (error) {
@@ -53,43 +49,44 @@ export default function QuipInput({
   }
 
   return (
-    <section>
-      <label htmlFor="quip-input">Your quip</label>
+    <section className="quip-input">
+      <label className="quip-input__label" htmlFor="quip-input">
+        Your quip
+      </label>
 
       <textarea
+        className="quip-input__textarea"
         id="quip-input"
         value={quip}
         onChange={(event) => handleChange(event.target.value)}
         maxLength={MAX_QUIP_LENGTH}
         rows={5}
-        disabled={hasSubmitted || isSubmitting || disabled}
+        disabled={hasSubmitted || isSubmitting}
         placeholder="Type your funniest answer..."
         aria-describedby="quip-counter quip-validation"
-        style={{
-          display: "block",
-          boxSizing: "border-box",
-          width: "100%",
-          marginTop: 8,
-          padding: 12,
-          border: "1px solid var(--border)",
-          borderRadius: 8,
-          font: "inherit",
-          resize: "vertical",
-        }}
       />
 
-      <p id="quip-counter" style={{ textAlign: "right" }}>
-        {quip.length}/{MAX_QUIP_LENGTH}
-      </p>
+      <div className="quip-input__meta">
+        <p className="quip-input__counter" id="quip-counter">
+          {quip.length}/{MAX_QUIP_LENGTH}
+        </p>
+      </div>
 
-      <p id="quip-validation" aria-live="polite">
+      <p
+        className={`quip-input__message ${
+          message && !hasSubmitted ? "quip-input__message--error" : ""
+        }`}
+        id="quip-validation"
+        aria-live="polite"
+      >
         {message || (!isValid ? "Enter a quip before submitting." : "")}
       </p>
 
       <button
         type="button"
+        className="quip-input__submit"
         onClick={handleSubmit}
-        disabled={!isValid || isSubmitting || hasSubmitted || disabled}
+        disabled={!isValid || isSubmitting || hasSubmitted}
       >
         {isSubmitting
           ? "Submitting..."

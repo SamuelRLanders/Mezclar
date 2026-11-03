@@ -42,7 +42,31 @@ export interface StartGameRequest {
   maximum_players: number;
 }
 
-export type GameControlAction = "pause" | "resume" | "skip" | "extend";
+export interface SessionGroup {
+  group_index: number;
+  prompt: string;
+  players: SessionPlayer[];
+  answers: Record<string, string>;
+  vote_counts: Record<string, number>;
+}
+
+export interface SessionEvent {
+  id: number;
+  timestamp: string;
+  type: string;
+  player_id: string | null;
+  player_name: string | null;
+  message: string;
+}
+
+export interface LeaderboardEntry {
+  player_id: string;
+  name: string;
+  hidden: boolean;
+  score: number;
+  rank: number;
+  waiting: boolean;
+}
 
 export interface SessionResponse {
   session_id: string;
@@ -55,16 +79,27 @@ export interface SessionResponse {
   players: SessionPlayer[];
   auto_generate_names: boolean;
   allow_late_join: boolean;
+  requires_password: boolean;
+  profanity_filter: boolean;
   game_started: boolean;
-  game_completed: boolean;
-  game_paused: boolean;
-  remaining_seconds: number;
   game_id: string | null;
   minimum_players: number | null;
   maximum_players: number | null;
   current_round: number;
+  total_rounds: number;
   current_prompt: string;
   answers: Record<string, string>;
+  groups: SessionGroup[];
+  round_duration_seconds: number | null;
+  round_deadline: string | null;
+  phase: string;
+  scores: Record<string, number>;
+  round_results: {
+    round: number;
+    groups: SessionGroup[];
+  }[];
+  event_log: SessionEvent[];
+  leaderboard: LeaderboardEntry[];
 }
 
 export interface KickPlayerRequest {

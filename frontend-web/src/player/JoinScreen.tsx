@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import "./JoinScreen.css";
-import { getSession, type SessionResponse, joinSession, regenerateName } from "../api/client";
+import { getDeviceToken, getSession, type SessionResponse, joinSession, regenerateName } from "../api/client";
 
 interface JoinSessionResponse {
   player_id: string;
@@ -22,10 +22,13 @@ export default function JoinScreen() {
   const [name, setName] = useState("");
   const [isJoining, setIsJoining] = useState(false);
   const [error, setError] = useState("");
+  const [password, setPassword] = useState("");
 
   const storedPlayerId = code ? sessionStorage.getItem("mezclar-player:" + code) : null;
   const isReturningPlayer = !!session && session.players.some((player) => player.player_id === storedPlayerId);
   const lateJoinBlocked = !!session && session.game_started && !session.allow_late_join && !isReturningPlayer;
+  const tooLateToJoin = !!session && session.game_started && session.game_id === "quiplash"
+    && session.current_round >= session.total_rounds && !isReturningPlayer;
 
   useEffect(() => {
     if (!code) return;
@@ -48,7 +51,7 @@ export default function JoinScreen() {
 
   const playerId = sessionStorage.getItem("mezclar-player:" + code) ?? crypto.randomUUID();
 
-  joinSession(code, playerId, "")
+  joinSession(code, playerId, "", password)
     .then((result) => {
       sessionStorage.setItem("mezclar-player:" + code, result.player_id);
       setName(result.name);
@@ -93,6 +96,8 @@ export default function JoinScreen() {
           body: JSON.stringify({
             player_id: playerId,
             name: name.trim() || null,
+            password: password.trim() || null,
+            device_token: getDeviceToken(),
           }),
         }
       );
@@ -174,6 +179,28 @@ export default function JoinScreen() {
     );
   }
 
+  if (tooLateToJoin) {
+    return (
+      <main className="join">
+        <div className="join__inner">
+          <header className="join__header">
+            <p className="join__eyebrow">Last round</p>
+
+            <h1 className="join__title">{code}</h1>
+
+            <p className="join__welcome">
+              This game is in its last round, so it's too late to join.
+            </p>
+          </header>
+
+          <Link className="join__submit join__home" to="/">
+            Back to home
+          </Link>
+        </div>
+      </main>
+    );
+  }
+
   return (
     <main className="join">
       <div className="join__inner">
@@ -200,21 +227,46 @@ export default function JoinScreen() {
               type="text"
               value={name}
               onChange={(event) => setName(event.target.value)}
-              placeholder="Enter your name"
+              placeholder={
+                session?.auto_generate_names
+                  ? "A name will be generated for you"
+                  : "Enter your name"
+              }
+              readOnly={session?.auto_generate_names}
               maxLength={30}
               autoComplete="off"
               autoFocus
             />
-            <button
-              type="button"
-              className="join-regenerate-button"
-              onClick={handleRegenerate}
-            >
-              ↻
-            </button>
+            {/* Rerolling needs a registered player, which late joiners aren't yet. */}
+            {session?.auto_generate_names && name && (
+              <button
+                type="button"
+                className="join-regenerate-button"
+                onClick={handleRegenerate}
+              >
+                ↻
+              </button>
+            )}
           </div>
-
-          {session?.auto_generate_names && <p>Leave blank for a generated name.</p>}
+          {session?.requires_password &&
+          <div className="join__form">
+            <label className="join__label">
+              Room Password
+            </label>
+            <div className="join_input_row">
+                <input
+                  type ="text"
+                  id="password"
+                  className="join__name"
+                  value={password}
+                  onChange={(event) => setPassword(event.target.value)}
+                  placeholder="Enter a password"
+                  maxLength={50}
+                  autoComplete = "new-password"
+                  />
+              </div>
+            </div>}
+          {session?.auto_generate_names && <p>Names are generated automatically for this game.</p>}
 
           <button
             className="join__submit"

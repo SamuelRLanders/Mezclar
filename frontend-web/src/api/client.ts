@@ -1,5 +1,4 @@
 import type {
-  GameControlAction,
   JoinSessionResponse,
   KickPlayerRequest,
   SessionPlayer,
@@ -25,7 +24,7 @@ export async function regenerateName(sessionId: string, player_id: string): Prom
   return data.name;
 }
 
-export type { GameControlAction, SessionPlayer, SessionResponse } from "../../../shared/types/messages";
+export type { LeaderboardEntry, SessionEvent, SessionPlayer, SessionResponse } from "../../../shared/types/messages";
 
 async function apiResponse<T>(response: Response): Promise<T> {
   const data = await response.json();
@@ -40,27 +39,43 @@ export async function createSession(
   hostName: string,
   gameId: string,
   options: Record<string, boolean>,
+  password?: string
 ): Promise<SessionResponse> {
-  const session = await apiResponse<SessionResponse & { host_token: string }>(await fetch("/api/session", {
+  return apiResponse(await fetch("/api/session", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ host_name: hostName, settings: { gameId, options } }),
+    body: JSON.stringify({ host_name: hostName, settings: { gameId, options }, password: password || null }),
   }));
-  sessionStorage.setItem("mezclar-host:" + session.session_id, session.host_token);
-  return session;
 }
 
 export async function getSession(code: string): Promise<SessionResponse> {
   return apiResponse(await fetch("/api/session/" + code));
 }
 
+const DEVICE_TOKEN_KEY = "mezclar-device";
+
+// One token per browser, kept across tabs and visits so a kick sticks to the device.
+export function getDeviceToken(): string {
+  let token = localStorage.getItem(DEVICE_TOKEN_KEY);
+  if (!token) {
+    token = crypto.randomUUID();
+    localStorage.setItem(DEVICE_TOKEN_KEY, token);
+  }
+  return token;
+}
+
 export async function joinSession(
-  code: string, playerId: string, name: string,
+  code: string, playerId: string, name: string, password?: string
 ): Promise<JoinSessionResponse> {
   return apiResponse(await fetch("/api/session/" + code + "/join", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ player_id: playerId, name: name.trim() || null }),
+    body: JSON.stringify({
+      player_id: playerId,
+      name: name.trim() || null,
+      password: password?.trim() || null,
+      device_token: getDeviceToken(),
+    }),
   }));
 }
 
@@ -84,7 +99,12 @@ export async function startGame(code: string, request: StartGameRequest): Promis
 }
 
 export function playerSocketUrl(code: string, playerId: string): string {
-  const url = new URL("/ws/session/" + code + "/player/" + playerId, window.location.href);
+  const path = "/ws/session/" + code + "/player/" + playerId;
+  // Vercel can't proxy WebSockets, so in production connect straight to the backend
+  // (VITE_WS_URL, e.g. "wss://api.example.com"). Unset locally, so Vite's /ws proxy is used.
+  const base = import.meta.env.VITE_WS_URL;
+  if (base) return base + path;
+  const url = new URL(path, window.location.href);
   url.protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
   return url.href;
 }
@@ -106,11 +126,11 @@ export async function hidePlayer(code: string, playerId: string, hidden: boolean
   return player;
 }
 
+
 export async function submitAnswer(
   sessionId: string,
   playerId: string,
   answer: string,
-  currentRound: number,
 ): Promise<void> {
   await apiResponse(await fetch(
     `/api/session/${sessionId}/submit-answer`,
@@ -120,11 +140,32 @@ export async function submitAnswer(
       body: JSON.stringify({
         player_id: playerId,
         answer,
-        current_round: currentRound,
       }),
     },
   ));
 }
+
+
+export async function submitVote(
+  sessionId: string,
+  voterId: string,
+  groupIndex: number,
+  answerOwnerId: string,
+): Promise<void> {
+  await apiResponse(await fetch(
+    `/api/session/${sessionId}/submit-vote`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        voter_id: voterId,
+        group_index: groupIndex,
+        answer_owner_id: answerOwnerId,
+      }),
+    },
+  ));
+}
+
 
 export async function advanceRound(
   sessionId: string,
@@ -133,20 +174,21 @@ export async function advanceRound(
     `/api/session/${sessionId}/advance-round`,
     {
       method: "POST",
-      headers: { "X-Host-Token": sessionStorage.getItem("mezclar-host:" + sessionId) ?? "" },
     },
   ));
 }
 
-export async function controlGame(code: string, action: GameControlAction, currentRound: number): Promise<SessionResponse> {
-  return apiResponse(await fetch(`/api/session/${code}/control`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "X-Host-Token": sessionStorage.getItem("mezclar-host:" + code) ?? "",
-    },
-    body: JSON.stringify({ action, current_round: currentRound }),
-  }));
+export async function startRoundTimer(
+  sessionId: string,
+  durationSeconds: number,
+): Promise<void> {
+  await apiResponse(
+    await fetch(`/api/session/${sessionId}/start-timer`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ duration_seconds: durationSeconds }),
+    }),
+  );
 }
 
 export async function modPlayer(code: string, playerId: string, mod: boolean): Promise<SessionPlayer> {
