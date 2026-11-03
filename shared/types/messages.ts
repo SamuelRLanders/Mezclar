@@ -92,6 +92,8 @@ export interface SessionResponse {
   groups: SessionGroup[];
   round_duration_seconds: number | null;
   round_deadline: string | null;
+  game_paused: boolean;
+  paused_remaining: number | null;
   phase: string;
   scores: Record<string, number>;
   round_results: {
@@ -100,6 +102,9 @@ export interface SessionResponse {
   }[];
   event_log: SessionEvent[];
   leaderboard: LeaderboardEntry[];
+  submitted_count: number;
+  eligible_count: number;
+  submitted_player_ids: string[];
 }
 
 export interface KickPlayerRequest {

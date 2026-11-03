@@ -1,6 +1,6 @@
 
 import { useEffect, useState } from "react";
-import { Link, useLocation, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import {
   getSession,
   playerSocketUrl,
@@ -9,6 +9,7 @@ import {
 } from "../api/client";
 import QuipInput from "./QuipInput";
 import "./GameLanding.css";
+import { GAMES } from "../host/games";
 
 interface GameLandingState {
   playerId?: string;
@@ -22,8 +23,11 @@ export default function GameLanding() {
     state: GameLandingState | null;
   };
 
-  const { playerId, sessionId } = state || {};
+  const { code } = useParams<{ code: string }>();
+  const sessionId = state?.sessionId ?? code;
+  const playerId = state?.playerId ?? (sessionId ? sessionStorage.getItem("mezclar-player:" + sessionId) : null);
   const navigate = useNavigate();
+  const [connectionAttempt, setConnectionAttempt] = useState(0);
 
   const [session, setSession] = useState<SessionResponse | null>(null);
   const [playerPrompt, setPlayerPrompt] = useState<{
@@ -65,14 +69,14 @@ export default function GameLanding() {
     }
 
     getSession(sessionId)
-      .then(setSession)
+      .then((data) => { setSession(data); setError(""); })
       .catch((error: unknown) => {
         setError(
           error instanceof Error ? error.message : "Could not load the game.",
         );
       })
       .finally(() => setLoading(false));
-  }, [sessionId]);
+  }, [sessionId, connectionAttempt]);
 
   useEffect(() => {
     if (!sessionId || !playerId) {
@@ -80,6 +84,7 @@ export default function GameLanding() {
     }
 
     const websocket = new WebSocket(playerSocketUrl(sessionId, playerId));
+    let reconnectTimeout: number;
 
     const leaveGame = () => {
       websocket.onclose = null;
@@ -122,6 +127,9 @@ export default function GameLanding() {
           setVoting({
             round: message.current_round,
             groups: message.groups,
+          });
+          getSession(sessionId).then(setSession).catch(() => {
+            setError("Could not restore your response confirmation. Please refresh.");
           });
         }
 
@@ -171,17 +179,27 @@ export default function GameLanding() {
     };
 
     websocket.onclose = (event) => {
-      if (event.code === 4403) leaveGame();
+      if (event.code === 4403 || event.code === 1008) {
+        leaveGame();
+        return;
+      }
+      reconnectTimeout = window.setTimeout(() => setConnectionAttempt((attempt) => attempt + 1), 1000);
     };
 
     return () => {
       websocket.onclose = null;
+      window.clearTimeout(reconnectTimeout);
       websocket.close();
     };
-  }, [sessionId, playerId, navigate]);
+  }, [sessionId, playerId, navigate, connectionAttempt]);
 
   useEffect(() => {
     const deadline = session?.round_deadline;
+
+    if (session?.game_paused) {
+      setSecondsRemaining(session.paused_remaining === null ? null : Math.ceil(session.paused_remaining));
+      return;
+    }
 
     if (!deadline || session?.phase === "finished") {
       setSecondsRemaining(null);
@@ -202,7 +220,7 @@ export default function GameLanding() {
     const intervalId = window.setInterval(updateCountdown, 250);
 
     return () => window.clearInterval(intervalId);
-  }, [session?.round_deadline, session?.phase]);
+  }, [session?.round_deadline, session?.phase, session?.game_paused, session?.paused_remaining]);
 
   async function handleSubmitVote() {
     if (
@@ -304,6 +322,10 @@ export default function GameLanding() {
 
         {!loading && !error && session && (
           <>
+              {session.game_paused && <p role="status">Paused</p>}
+              {isVoting && playerId && session.submitted_player_ids.includes(playerId) && (
+                <p role="status">Response received</p>
+              )}
             {isAnswering && (
               <section className="game__play">
                 <div className="game__intro">
@@ -357,6 +379,11 @@ export default function GameLanding() {
                       key={session.current_round}
                       sessionId={sessionId}
                       playerId={playerId}
+                      currentRound={session.current_round}
+                      disabled={session.game_paused || (session.round_deadline !== null && secondsRemaining === 0)}
+                      acceptedAnswer={session.submitted_player_ids.includes(playerId)
+                        ? session.groups.find((group) => Object.hasOwn(group.answers, playerId))?.answers[playerId]
+                        : undefined}
                     />
                   </div>
                 )}
@@ -552,6 +579,7 @@ export default function GameLanding() {
                   <h1>
                     Game <span>over!</span>
                   </h1>
+                  <p>{GAMES.find((game) => game.id === session.game_id)?.name ?? session.game_id} complete</p>
                   <p>
                     That's what we call a good round. Here's how everyone
                     finished.

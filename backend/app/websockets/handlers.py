@@ -3,6 +3,7 @@ import asyncio
 from fastapi import WebSocket, WebSocketDisconnect
 
 from backend.app.sessions.session import Session
+from backend.app.api.voting import send_voting_options
 from backend.app.websockets.connection_manager import (
     connection_manager,
 )
@@ -98,6 +99,9 @@ async def handle_join(
             "game_id": session.game_id,
         })
 
+        if session.phase == "finished":
+            await websocket.send_json({"type": "game_finished", "session_id": session.session_id})
+
         if session.is_player_in_current_round(player_id):
             await websocket.send_json({
                 "type": "round_joined",
@@ -106,6 +110,8 @@ async def handle_join(
             })
 
     await send_player_prompt(session, player_id)
+    if session.phase == "voting":
+        await send_voting_options(session, session.current_round, [player_id])
 
     try:
         while True:
@@ -129,7 +135,7 @@ async def send_player_prompt(
     round_number: int | None = None,
 ) -> None:
     """Send the prompt assigned to this player's group."""
-    if not session.game_started or session.game_id != "quiplash":
+    if not session.game_started or session.game_id != "quiplash" or session.phase == "finished":
         return
 
     if round_number is None:

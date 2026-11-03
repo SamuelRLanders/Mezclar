@@ -5,6 +5,7 @@ from fastapi import WebSocket
 
 class ConnectionManager:
     def __init__(self):
+        self.host_connections: dict[str, set[WebSocket]] = defaultdict(set)
         self.active_connections: dict[
             str,
             dict[str, WebSocket],
@@ -82,15 +83,16 @@ class ConnectionManager:
         session_id: str,
         message: dict,
         exclude: str | None = None,
+        host_only: bool = False,
     ) -> None:
-        connections = self.active_connections.get(
+        connections = {} if host_only else self.active_connections.get(
             session_id,
             {},
         )
 
         disconnected_players: list[str] = []
 
-        for player_id, websocket in connections.items():
+        for player_id, websocket in list(connections.items()):
             if player_id == exclude:
                 continue
 
@@ -101,6 +103,12 @@ class ConnectionManager:
 
         for player_id in disconnected_players:
             self.disconnect(session_id, player_id)
+
+        for websocket in list(self.host_connections.get(session_id, set())):
+            try:
+                await websocket.send_json(message)
+            except Exception:
+                self.host_connections[session_id].discard(websocket)
 
     async def disconnect_player(self, session_id: str, player_id: str, code: int = 4403) -> None:
         websocket = self.active_connections.get(session_id, {}).get(player_id)

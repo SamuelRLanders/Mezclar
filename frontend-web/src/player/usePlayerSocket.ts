@@ -64,6 +64,7 @@ export function usePlayerSocket(
     "Connecting..."
   );
   const [error, setError] = useState("");
+  const [connectionAttempt, setConnectionAttempt] = useState(0);
 
   // Kept in a ref so a new callback on each render doesn't reopen the socket.
   const onGameStartedRef = useRef(onGameStarted);
@@ -81,6 +82,7 @@ export function usePlayerSocket(
     }
 
     let active = true;
+    let reconnectTimeout: number;
     let connectedName = initialName ?? "Player";
     const websocket = new WebSocket(
       playerSocketUrl(sessionId, playerId)
@@ -123,6 +125,11 @@ export function usePlayerSocket(
             connectedName
           );
         }
+        if (message.type === "game_finished") {
+          navigate(`/player/${sessionId}/game`, {
+            state: { playerId, sessionId, playerName: connectedName },
+          });
+        }
         if (message.type === "round_joined") {
           onRoundJoinedRef.current?.(
             message as RoundJoinedMessage,
@@ -153,12 +160,14 @@ export function usePlayerSocket(
       }
       setConnectionStatus("Disconnected");
       setError("Lost connection to the game server.");
+      reconnectTimeout = window.setTimeout(() => setConnectionAttempt((attempt) => attempt + 1), 1000);
       setGameId(null);
       setPlayers([]);
     };
 
     return () => {
       active = false;
+      window.clearTimeout(reconnectTimeout);
       websocket.close();
     };
 
@@ -170,7 +179,7 @@ export function usePlayerSocket(
       }
       navigate("/", { replace: true, state: { notice } });
     }
-  }, [navigate, playerId, initialName, sessionId]);
+  }, [navigate, playerId, initialName, sessionId, connectionAttempt]);
 
   return {
     playerName,

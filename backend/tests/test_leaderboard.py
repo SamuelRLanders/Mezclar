@@ -50,7 +50,7 @@ def test_late_joiner_listed_last_and_waiting(client):
 def test_late_joiner_stops_waiting_once_in_a_round(client):
     code = start_quiplash(client)
     client.post("/session/" + code + "/join", json={"player_id": "late", "name": "late"})
-    client.post("/session/" + code + "/advance-round")
+    client.post("/session/" + code + "/advance-round", headers={"X-Host-Token": registry.get_session(code).host_token})
 
     entry = registry.get_session(code).get_leaderboard()[-1]
     assert entry["player_id"] == "late"

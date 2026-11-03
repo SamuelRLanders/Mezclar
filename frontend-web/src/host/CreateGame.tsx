@@ -70,7 +70,8 @@ export default function CreateGame() {
         throw new Error(`Server returned status ${response.status}`);
       }
 
-      const data: { session_id: string } = await response.json();
+      const data: { session_id: string; host_token: string } = await response.json();
+      sessionStorage.setItem("mezclar-host:" + data.session_id, data.host_token);
 
       navigate("/host/lobby/" + data.session_id, {
         state: {

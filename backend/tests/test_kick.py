@@ -56,7 +56,7 @@ def test_kicking_last_unsubmitted_player_starts_voting(client):
 
 def test_kick_leaves_past_rounds_alone(client):
     code = start_quiplash(client)
-    client.post("/session/" + code + "/advance-round")
+    client.post("/session/" + code + "/advance-round", headers={"X-Host-Token": registry.get_session(code).host_token})
     kick(client, code, "p1")
 
     session = registry.get_session(code)
@@ -66,7 +66,7 @@ def test_kick_leaves_past_rounds_alone(client):
 def test_kicked_player_not_waited_on_in_later_rounds(client):
     code = start_quiplash(client)
     kick(client, code, "p1")
-    client.post("/session/" + code + "/advance-round")
+    client.post("/session/" + code + "/advance-round", headers={"X-Host-Token": registry.get_session(code).host_token})
 
     everyone_submits(client, code)
     assert registry.get_session(code).phase == "voting"

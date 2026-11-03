@@ -17,6 +17,7 @@ def test_create_session(client):
     assert session["players"] == []
     assert session["player_count"] == 0
     assert session["game_started"] is False
+    assert len(session.pop("host_token")) >= 32
     assert client.get("/session/" + session["session_id"]).json() == session
 
 def test_feature_branch_create_call_without_body_is_supported(client):

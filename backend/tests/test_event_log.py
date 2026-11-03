@@ -76,7 +76,7 @@ def test_late_join_logged(client):
 def test_round_start_then_insert_logged(client):
     code = start_quiplash(client)
     client.post("/session/" + code + "/join", json={"player_id": "late", "name": "late"})
-    client.post("/session/" + code + "/advance-round")
+    client.post("/session/" + code + "/advance-round", headers={"X-Host-Token": registry.get_session(code).host_token})
 
     session = registry.get_session(code)
     assert event_types(session)[-2:] == ["round_started", "player_inserted"]
@@ -84,8 +84,8 @@ def test_round_start_then_insert_logged(client):
 
 def test_game_lifecycle_logged_once(client):
     code = start_quiplash(client, rounds=1)
-    client.post("/session/" + code + "/advance-round")
-    client.post("/session/" + code + "/advance-round")
+    client.post("/session/" + code + "/advance-round", headers={"X-Host-Token": registry.get_session(code).host_token})
+    client.post("/session/" + code + "/advance-round", headers={"X-Host-Token": registry.get_session(code).host_token})
 
     types = event_types(registry.get_session(code))
     assert types.count("game_started") == 1
