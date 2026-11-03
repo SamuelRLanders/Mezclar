@@ -123,6 +123,9 @@ export default function GameLanding() {
             round: message.current_round,
             groups: message.groups,
           });
+          getSession(sessionId).then(setSession).catch(() => {
+            setError("Could not restore your response confirmation. Please refresh.");
+          });
         }
 
         if (message.type === "round_updated") {
@@ -304,6 +307,9 @@ export default function GameLanding() {
 
         {!loading && !error && session && (
           <>
+              {isVoting && playerId && session.groups.some((group) => Object.hasOwn(group.answers, playerId)) && (
+                <p role="status">Response received</p>
+              )}
             {isAnswering && (
               <section className="game__play">
                 <div className="game__intro">
@@ -357,6 +363,8 @@ export default function GameLanding() {
                       key={session.current_round}
                       sessionId={sessionId}
                       playerId={playerId}
+                      currentRound={session.current_round}
+                      acceptedAnswer={session.groups.find((group) => Object.hasOwn(group.answers, playerId))?.answers[playerId]}
                     />
                   </div>
                 )}

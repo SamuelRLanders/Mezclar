@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { submitAnswer } from "../api/client";
+import { getSession, submitAnswer } from "../api/client";
 import "./QuipInput.css";
 
 const MAX_QUIP_LENGTH = 200;
@@ -7,16 +7,22 @@ const MAX_QUIP_LENGTH = 200;
 type QuipInputProps = {
   sessionId: string;
   playerId: string;
+  currentRound: number;
+  acceptedAnswer?: string;
 };
 
 export default function QuipInput({
   sessionId,
   playerId,
+  currentRound,
+  acceptedAnswer,
 }: QuipInputProps) {
   const [quip, setQuip] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [message, setMessage] = useState("");
-  const [hasSubmitted, setHasSubmitted] = useState(false);
+  const [submitted, setSubmitted] = useState(false);
+  const hasSubmitted = submitted || acceptedAnswer !== undefined;
+  const answer = acceptedAnswer ?? quip;
 
   const isValid = quip.trim().length > 0;
 
@@ -35,14 +41,20 @@ export default function QuipInput({
 
     try {
       await submitAnswer(sessionId, playerId, quip.trim());
-      setHasSubmitted(true);
-      setMessage("Your quip was submitted!");
+      setSubmitted(true);
     } catch (error) {
-      setMessage(
-        error instanceof Error
-          ? error.message
-          : "Could not submit your quip. Please try again.",
-      );
+      const session = await getSession(sessionId).catch(() => null);
+      const received = session?.current_round === currentRound
+        && session.groups.some((group) => Object.hasOwn(group.answers, playerId));
+      if (received) {
+        setSubmitted(true);
+      } else {
+        setMessage(
+          error instanceof Error
+            ? error.message
+            : "Could not submit your quip. Please try again.",
+        );
+      }
     } finally {
       setIsSubmitting(false);
     }
@@ -57,7 +69,7 @@ export default function QuipInput({
       <textarea
         className="quip-input__textarea"
         id="quip-input"
-        value={quip}
+        value={answer}
         onChange={(event) => handleChange(event.target.value)}
         maxLength={MAX_QUIP_LENGTH}
         rows={5}
@@ -68,7 +80,7 @@ export default function QuipInput({
 
       <div className="quip-input__meta">
         <p className="quip-input__counter" id="quip-counter">
-          {quip.length}/{MAX_QUIP_LENGTH}
+          {answer.length}/{MAX_QUIP_LENGTH}
         </p>
       </div>
 
@@ -79,7 +91,7 @@ export default function QuipInput({
         id="quip-validation"
         aria-live="polite"
       >
-        {message || (!isValid ? "Enter a quip before submitting." : "")}
+        {hasSubmitted ? "Response received" : message || (!isValid ? "Enter a quip before submitting." : "")}
       </p>
 
       <button
