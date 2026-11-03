@@ -3,6 +3,7 @@ import { Link, useParams } from "react-router-dom";
 import {
   advanceRound,
   getSession,
+  hostSocketUrl,
   kickPlayer,
   type LeaderboardEntry,
   type SessionEvent,
@@ -66,10 +67,23 @@ export default function HostGameView() {
     loadSession();
 
     const intervalId = window.setInterval(loadSession, 2000);
+    let websocket: WebSocket;
+    let reconnectTimeout: number;
+    function connect() {
+      websocket = new WebSocket(hostSocketUrl(code!));
+      websocket.onopen = () => { void loadSession(); };
+      websocket.onmessage = () => { void loadSession(); };
+      websocket.onclose = () => {
+        if (isMounted) reconnectTimeout = window.setTimeout(connect, 1000);
+      };
+    }
+    connect();
 
     return () => {
       isMounted = false;
       window.clearInterval(intervalId);
+      window.clearTimeout(reconnectTimeout);
+      websocket.close();
     };
   }, [code]);
 
@@ -315,6 +329,9 @@ export default function HostGameView() {
 
         {!loading && !error && session && (
           <>
+            {!isFinished && (
+              <p role="status">{session.submitted_count} of {session.eligible_count} responses received</p>
+            )}
             {!isFinished && (
               <section className="host-game__overview">
                 <article className="host-game__stat">

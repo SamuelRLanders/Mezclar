@@ -85,6 +85,12 @@ class SessionResponse(BaseModel):
     round_results: list[dict] = Field(default_factory=list)
     event_log: list[SessionEventResponse] = Field(default_factory=list)
     leaderboard: list[LeaderboardEntryResponse] = Field(default_factory=list)
+    submitted_count: int = 0
+    eligible_count: int = 0
+    submitted_player_ids: list[str] = Field(default_factory=list)
+
+class CreateSessionResponse(SessionResponse):
+    host_token: str
 
 class StartGameRequest(BaseModel):
     game_id: str

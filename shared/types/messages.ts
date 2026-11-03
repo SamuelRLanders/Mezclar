@@ -100,6 +100,9 @@ export interface SessionResponse {
   }[];
   event_log: SessionEvent[];
   leaderboard: LeaderboardEntry[];
+  submitted_count: number;
+  eligible_count: number;
+  submitted_player_ids: string[];
 }
 
 export interface KickPlayerRequest {

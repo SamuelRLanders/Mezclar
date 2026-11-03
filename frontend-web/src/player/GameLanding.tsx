@@ -307,7 +307,7 @@ export default function GameLanding() {
 
         {!loading && !error && session && (
           <>
-              {isVoting && playerId && session.groups.some((group) => Object.hasOwn(group.answers, playerId)) && (
+              {isVoting && playerId && session.submitted_player_ids.includes(playerId) && (
                 <p role="status">Response received</p>
               )}
             {isAnswering && (
@@ -364,7 +364,9 @@ export default function GameLanding() {
                       sessionId={sessionId}
                       playerId={playerId}
                       currentRound={session.current_round}
-                      acceptedAnswer={session.groups.find((group) => Object.hasOwn(group.answers, playerId))?.answers[playerId]}
+                      acceptedAnswer={session.submitted_player_ids.includes(playerId)
+                        ? session.groups.find((group) => Object.hasOwn(group.answers, playerId))?.answers[playerId]
+                        : undefined}
                     />
                   </div>
                 )}

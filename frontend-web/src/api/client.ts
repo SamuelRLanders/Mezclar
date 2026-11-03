@@ -40,7 +40,7 @@ export async function createSession(
   gameId: string,
   options: Record<string, boolean>,
   password?: string
-): Promise<SessionResponse> {
+): Promise<SessionResponse & { host_token: string }> {
   return apiResponse(await fetch("/api/session", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -106,6 +106,13 @@ export function playerSocketUrl(code: string, playerId: string): string {
   if (base) return base + path;
   const url = new URL(path, window.location.href);
   url.protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+  return url.href;
+}
+
+export function hostSocketUrl(code: string): string {
+  const url = new URL(playerSocketUrl(code, "host"));
+  url.pathname = `/ws/session/${code}/host`;
+  url.searchParams.set("token", sessionStorage.getItem("mezclar-host:" + code) ?? "");
   return url.href;
 }
 

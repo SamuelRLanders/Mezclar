@@ -16,6 +16,7 @@ from backend.app.sessions.registry import get_or_create_session, get_session
 from backend.app.naming.generator import generate_unique_name, validate_name
 
 from backend.app.api.voting import start_voting
+from backend.app.websockets.connection_manager import connection_manager
 
 router = APIRouter()
 
@@ -159,7 +160,11 @@ async def submit_answer(
             detail=str(error),
         )
 
-    print("Submit!")
+    await connection_manager.broadcast_to_session(session_id, {
+        "type": "response_count_updated",
+        "current_round": session.current_round,
+        **session.response_progress(),
+    }, host_only=True)
 
     if session.all_players_submitted(session.current_round):
         print("All Players Submitted!")

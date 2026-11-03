@@ -3,6 +3,7 @@ from backend.app.models.schemas import (
     KickPlayerRequest,
     ToggleAutoNamesRequest,
     CreateSessionRequest,
+    CreateSessionResponse,
     SessionPlayerResponse,
     SessionResponse,
     StartGameRequest,
@@ -35,13 +36,15 @@ def toggle_profanity_filter(session_id: str, request: ToggleAutoNamesRequest) ->
     session = get_or_create_session(session_id)
     session.set_profanity_filter(request.enabled)
 
-@router.post("/session", response_model=SessionResponse)
-def create_session(request: CreateSessionRequest | None = None) -> SessionResponse:
+@router.post("/session", response_model=CreateSessionResponse)
+def create_session(request: CreateSessionRequest | None = None) -> CreateSessionResponse:
     try:
         session = registry.create_session(request)
     except RuntimeError as error:
         raise HTTPException(status_code=503, detail=str(error)) from error
-    return get_session_info(session.session_id)
+    return CreateSessionResponse(
+        **get_session_info(session.session_id).model_dump(), host_token=session.host_token,
+    )
 
 @router.get("/session/{session_id}", response_model=SessionResponse)
 def get_session_info(session_id: SessionCode) -> SessionResponse:
@@ -163,6 +166,7 @@ def get_session_info(session_id: SessionCode) -> SessionResponse:
         scores=session.scores, round_results=round_results,
         event_log=session.event_log,
         leaderboard=session.get_leaderboard(),
+        **session.response_progress(),
     )
 
 @router.post("/session/{session_id}/start")

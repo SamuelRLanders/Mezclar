@@ -45,7 +45,7 @@ export default function QuipInput({
     } catch (error) {
       const session = await getSession(sessionId).catch(() => null);
       const received = session?.current_round === currentRound
-        && session.groups.some((group) => Object.hasOwn(group.answers, playerId));
+        && session.submitted_player_ids.includes(playerId);
       if (received) {
         setSubmitted(true);
       } else {
