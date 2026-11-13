@@ -88,6 +88,13 @@ def join_session(
             game_started=session.game_started,
         )
 
+    # Keywords groups are fixed at start, so a late joiner would have no group to play in.
+    if session.game_started and session.game_id == "keywords":
+        raise HTTPException(
+            status_code=403,
+            detail="This Keywords game has already started.",
+        )
+
     if session.game_started and not session.allow_late_join:
         raise HTTPException(
             status_code=403,

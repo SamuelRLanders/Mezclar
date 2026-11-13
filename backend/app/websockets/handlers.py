@@ -102,6 +102,10 @@ async def handle_join(
         if session.phase == "finished":
             await websocket.send_json({"type": "game_finished", "session_id": session.session_id})
 
+        # Restore the player's Keywords screen after a refresh or reconnect.
+        if session.game_id == "keywords":
+            await send_keywords_state(session, player_id)
+
         if session.is_player_in_current_round(player_id):
             await websocket.send_json({
                 "type": "round_joined",
@@ -166,4 +170,18 @@ async def send_player_prompt(
             "current_round": round_number,
             "current_prompt": prompt,
         },
+    )
+
+
+async def send_keywords_state(session: Session, player_id: str) -> None:
+    # Send one player their private Keywords view (used after actions and on reconnect).
+    if session.keywords is None:
+        return
+    try:
+        view = session.keywords.player_view(player_id)
+    except ValueError:
+        # Players who aren't in a group (e.g. joined late) have nothing to show.
+        return
+    await connection_manager.send_to_player(
+        session.session_id, player_id, {"type": "keywords_state", **view},
     )

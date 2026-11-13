@@ -6,6 +6,7 @@ from backend.app.api.routes_websocket import router as websocket_router
 
 from backend.app.api.routes_host import router as host_router
 from backend.app.api.routes_player import router as player_router
+from backend.app.api.routes_keywords import router as keywords_router
 
 app = FastAPI()
 
@@ -25,4 +26,5 @@ app.add_middleware(
 
 app.include_router(host_router)
 app.include_router(player_router)
+app.include_router(keywords_router)
 app.include_router(websocket_router)
