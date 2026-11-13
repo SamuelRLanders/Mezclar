@@ -150,7 +150,8 @@ export default function LobbyView() {
           : previous
       );
 
-      navigate(`/host/game/${sessionId}`);
+      // Each game has its own host control page.
+      navigate(game.id === "keywords" ? `/host/keywords/${sessionId}` : `/host/game/${sessionId}`);
     } catch (error) {
       console.error("Failed to start game:", error);
 

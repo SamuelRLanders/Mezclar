@@ -120,3 +120,66 @@ export interface ModPlayerRequest {
   player_id: string;
   is_mod: boolean;
 }
+
+// The phases each Keywords group moves through, in order.
+export type KeywordsPhase = "gathering" | "roles" | "speaking" | "voting" | "reveal";
+
+export interface KeywordsMember {
+  player_id: string;
+  name: string;
+}
+
+// The outcome of one group's game, shown on the reveal screen.
+export interface KeywordsResult {
+  winner: "players" | "faker";
+  faker_id: string;
+  faker_name: string;
+  keyword: string;
+  faker_guess: string | null;
+  faker_caught: boolean;
+  faker_guessed_keyword: boolean;
+  vote_counts: Record<string, number>;
+}
+
+/*
+ * What one player is allowed to see; mirrors KeywordsGame.player_view() in the backend.
+ * keyword is null for the faker, and for everyone until the roles phase.
+ */
+export interface KeywordsPlayerView {
+  phase: KeywordsPhase;
+  group_index: number;
+  group_color: string;
+  group_label: string;
+  members: KeywordsMember[];
+  ready_player_ids: string[];
+  role_seen_player_ids: string[];
+  is_faker: boolean;
+  keyword: string | null;
+  speaking_order: string[];
+  current_speaker_id: string | null;
+  has_submitted: boolean;
+  submitted_count: number;
+  result: KeywordsResult | null;
+}
+
+// One group as the host sees it, secrets included; mirrors KeywordsGame.host_view().
+export interface KeywordsHostGroup {
+  group_index: number;
+  group_color: string;
+  group_label: string;
+  phase: KeywordsPhase;
+  members: KeywordsMember[];
+  keyword: string;
+  faker_id: string;
+  ready_player_ids: string[];
+  role_seen_player_ids: string[];
+  speaking_order: string[];
+  current_speaker_id: string | null;
+  submitted_player_ids: string[];
+  result: KeywordsResult | null;
+}
+
+export interface KeywordsHostView {
+  finished: boolean;
+  groups: KeywordsHostGroup[];
+}

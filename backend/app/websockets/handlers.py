@@ -99,7 +99,8 @@ async def handle_join(
             "game_id": session.game_id,
         })
 
-        if session.phase == "finished":
+        # Only Quiplash has a shared end screen; Keywords shows results on its own page.
+        if session.phase == "finished" and session.game_id == "quiplash":
             await websocket.send_json({"type": "game_finished", "session_id": session.session_id})
 
         # Restore the player's Keywords screen after a refresh or reconnect.
