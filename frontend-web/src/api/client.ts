@@ -1,5 +1,7 @@
 import type {
   JoinSessionResponse,
+  KeywordsHostView,
+  KeywordsPlayerView,
   KickPlayerRequest,
   SessionPlayer,
   SessionResponse,
@@ -24,7 +26,16 @@ export async function regenerateName(sessionId: string, player_id: string): Prom
   return data.name;
 }
 
-export type { LeaderboardEntry, SessionEvent, SessionPlayer, SessionResponse } from "../../../shared/types/messages";
+export type {
+  KeywordsHostGroup,
+  KeywordsHostView,
+  KeywordsPlayerView,
+  KeywordsResult,
+  LeaderboardEntry,
+  SessionEvent,
+  SessionPlayer,
+  SessionResponse,
+} from "../../../shared/types/messages";
 
 async function apiResponse<T>(response: Response): Promise<T> {
   const data = await response.json();
@@ -225,4 +236,40 @@ export async function modPlayer(code: string, playerId: string, mod: boolean): P
     body: JSON.stringify({ player_id: playerId, is_mod: mod }),
   }));
   return player;
+}
+
+// A player's current Keywords screen, for page load and refresh.
+export async function getKeywordsState(code: string, playerId: string): Promise<KeywordsPlayerView> {
+  return apiResponse(await fetch(
+    `/api/session/${code}/keywords/state?player_id=${encodeURIComponent(playerId)}`,
+  ));
+}
+
+// The three "I'm done with this screen" buttons all send just the player ID.
+export async function keywordsAction(
+  code: string,
+  action: "ready" | "role-seen" | "word-said",
+  playerId: string,
+): Promise<KeywordsPlayerView> {
+  return apiResponse(await fetch(`/api/session/${code}/keywords/${action}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ player_id: playerId }),
+  }));
+}
+
+// A suspect's name, or the faker's keyword guess; the same call for both.
+export async function keywordsSubmit(code: string, playerId: string, text: string): Promise<KeywordsPlayerView> {
+  return apiResponse(await fetch(`/api/session/${code}/keywords/submit`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ player_id: playerId, text }),
+  }));
+}
+
+// Every group's full state, keywords and fakers included. Needs the host token.
+export async function getKeywordsHostState(code: string): Promise<KeywordsHostView> {
+  return apiResponse(await fetch(`/api/session/${code}/keywords/host-state`, {
+    headers: { "X-Host-Token": sessionStorage.getItem("mezclar-host:" + code) ?? "" },
+  }));
 }

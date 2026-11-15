@@ -39,7 +39,9 @@ export default function PlayerLobby() {
     initialName: state?.playerName,
     initialGameId: state?.gameId,
     onGameStarted: (message, connectedName) => {
-      navigate(`/player/${sessionId}/game`, {
+      // Each game has its own player page.
+      const gamePage = message.game_id === "keywords" ? "keywords" : "game";
+      navigate(`/player/${sessionId}/${gamePage}`, {
         state: {
           playerId,
           playerName: connectedName,

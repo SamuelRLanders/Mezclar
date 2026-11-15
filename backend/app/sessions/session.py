@@ -12,6 +12,7 @@ from math import ceil, sqrt
 from backend.app.naming.generator import generate_unique_name, validate_name
 from backend.app.sessions.player import Player
 from backend.app.games.quiplash.prompts import QUIPLASH_PROMPTS
+from backend.app.games.keywords.game import KeywordsGame
 
 MAX_EVENT_LOG = 100
 
@@ -73,6 +74,12 @@ class Session:
         self.paused_remaining: float | None = None
 
         self.phase: str = "lobby"
+
+        """
+        Keywords game state: groups, roles, turns and votes. Set when a Keywords
+        game starts and None otherwise; Quiplash never touches it.
+        """
+        self.keywords: KeywordsGame | None = None
 
         # Recent events shown in the host's game log.
         self.event_log: list[dict] = []
@@ -464,12 +471,20 @@ class Session:
             self.current_prompt = next(
                 iter(self.group_prompts[self.current_round].values())
             )
+            self.phase = "answering"
+        elif self.game_id == "keywords":
+            # Snapshot each player's name; the game uses them to match typed votes.
+            self.keywords = KeywordsGame.start(
+                {player_id: player.name for player_id, player in self.players.items()}
+            )
+            # Keywords has no rounds; each group moves through its own phases instead.
+            self.phase = "playing"
         else:
             self.current_prompt = QUIPLASH_PROMPTS[0]
             self.current_round = 1
+            self.phase = "answering"
 
         self.game_started = True
-        self.phase = "answering"
         self.log_event("game_started", "The game started.")
 
 

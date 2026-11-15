@@ -42,6 +42,8 @@ interface PlayerSocketOptions {
   initialGameId?: string;
   onGameStarted?: (message: GameStartedMessage, playerName: string) => void;
   onRoundJoined?: (message: RoundJoinedMessage, playerName: string) => void;
+  // Called with every message, so a game page can listen for its own message types.
+  onMessage?: (message: { type: string; [key: string]: unknown }) => void;
 }
 
 /**
@@ -52,7 +54,7 @@ interface PlayerSocketOptions {
 export function usePlayerSocket(
   sessionId: string | undefined,
   playerId: string | null,
-  { initialName, initialGameId, onGameStarted, onRoundJoined }: PlayerSocketOptions = {},
+  { initialName, initialGameId, onGameStarted, onRoundJoined, onMessage }: PlayerSocketOptions = {},
 ) {
   const navigate = useNavigate();
 
@@ -69,9 +71,11 @@ export function usePlayerSocket(
   // Kept in a ref so a new callback on each render doesn't reopen the socket.
   const onGameStartedRef = useRef(onGameStarted);
   const onRoundJoinedRef = useRef(onRoundJoined);
+  const onMessageRef = useRef(onMessage);
   useEffect(() => {
     onGameStartedRef.current = onGameStarted;
     onRoundJoinedRef.current = onRoundJoined;
+    onMessageRef.current = onMessage;
   });
 
   useEffect(() => {
@@ -98,6 +102,7 @@ export function usePlayerSocket(
       if (!active) return;
       try {
         const message = JSON.parse(event.data);
+        onMessageRef.current?.(message);
 
         if (message.type === "kicked") {
           leaveLobby("You have been kicked from the session.")

@@ -160,6 +160,18 @@ class StartRoundTimerRequest(BaseModel):
     duration_seconds: int
     current_round: int | None = Field(default=None, gt=0)
 
+class KeywordsActionRequest(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
+
+    player_id: str = Field(min_length=1)
+
+class KeywordsSubmitRequest(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
+
+    player_id: str = Field(min_length=1)
+    # A suspect's name or the faker's keyword guess; same field for both.
+    text: str = Field(min_length=1, max_length=50)
+
 class SubmitVoteRequest(BaseModel):
     voter_id: str
     group_index: int
