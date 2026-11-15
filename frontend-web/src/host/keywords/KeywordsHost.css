@@ -1,0 +1,114 @@
+/*
+ * Styles for the Keywords host page. Group colors come from the keywords--<color>
+ * classes in player/keywords/Keywords.css, which set --group-color.
+ */
+.keywords-host {
+  max-width: 1000px;
+  margin: 0 auto;
+  padding: 32px 16px 48px;
+}
+
+.keywords-host__header {
+  margin-bottom: 24px;
+  text-align: center;
+}
+
+.keywords-host__header h1 {
+  margin: 8px 0;
+  font-size: 40px;
+}
+
+.keywords-host__eyebrow {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  opacity: 0.85;
+}
+
+.keywords-host__details {
+  margin: 0;
+  color: var(--text-muted);
+}
+
+.keywords-host__error {
+  color: var(--error);
+  text-align: center;
+}
+
+/* Cards wrap into as many columns as fit. */
+.keywords-host__groups {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 16px;
+}
+
+/* A thick top stripe in the group's color; plain white border for a single group. */
+.keywords-host__card {
+  padding: 20px;
+  border: 1px solid var(--border);
+  border-top: 8px solid var(--group-color, var(--border));
+  border-radius: 16px;
+  background: var(--surface);
+}
+
+.keywords-host__card h2 {
+  margin: 4px 0 12px;
+  font-size: 22px;
+}
+
+/* Keyword and faker: label on the left, value on the right. */
+.keywords-host__secrets {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 4px 12px;
+  margin: 0 0 12px;
+}
+
+.keywords-host__secrets dt {
+  color: var(--text-muted);
+}
+
+.keywords-host__secrets dd {
+  margin: 0;
+  font-weight: 700;
+}
+
+.keywords-host__result {
+  margin: 0 0 12px;
+}
+
+.keywords-host__members {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.keywords-host__members li {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 12px;
+  margin-bottom: 6px;
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.18);
+}
+
+.keywords-host__faker-tag {
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  opacity: 0.8;
+}
+
+.keywords-host__status {
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.keywords-host__home {
+  display: inline-block;
+  margin-top: 24px;
+  color: var(--text-muted);
+}

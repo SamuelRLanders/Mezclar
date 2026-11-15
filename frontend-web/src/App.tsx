@@ -9,6 +9,7 @@ import GameLanding from "./player/GameLanding";
 import GameInSession from "./player/GameInSession";
 import HostGameView from "./host/HostGameView";
 import KeywordsPlayer from "./player/keywords/KeywordsPlayer";
+import KeywordsHostView from "./host/keywords/KeywordsHostView";
 
 export default function App() {
   return (
@@ -22,6 +23,7 @@ export default function App() {
       <Route path="/host/new" element={<CreateGame />} />
       <Route path="/host/lobby/:code" element={<LobbyView />} />
       <Route path="/host/game/:code" element={<HostGameView />} />
+      <Route path="/host/keywords/:code" element={<KeywordsHostView />} />
       <Route path="/host/lobby" element={<LobbyView />} />
       <Route path="/about" element={<About />} />
       <Route path="*" element={<Navigate to="/" replace />} />
