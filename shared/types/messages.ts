@@ -150,6 +150,8 @@ export interface KeywordsPlayerView {
   group_index: number;
   group_color: string;
   group_label: string;
+  // True when the whole game is one group, so screens skip the group color and name.
+  single_group: boolean;
   members: KeywordsMember[];
   ready_player_ids: string[];
   role_seen_player_ids: string[];

@@ -136,6 +136,9 @@ class KeywordsGame:
         # A different keyword per group, so overhearing another table doesn't help a faker.
         keywords = random.sample(KEYWORDS, group_count)
 
+        # With only one group, everyone is already together, so skip gathering.
+        first_phase = ROLES if group_count == 1 else GATHERING
+
         groups = []
         for index in range(group_count):
             # Every group_count-th player starting at index, i.e. dealing cards around a table.
@@ -150,6 +153,7 @@ class KeywordsGame:
                 player_ids=members,
                 faker_id=random.choice(members),
                 keyword=keywords[index],
+                phase=first_phase,
             ))
 
         return cls(groups, dict(players))
@@ -310,6 +314,8 @@ class KeywordsGame:
             "group_index": group.index,
             "group_color": group.color,
             "group_label": group.label,
+            # With one group there's nobody else to find, so screens drop the group color and name.
+            "single_group": len(self.groups) == 1,
             "members": self._members(group),
             # Who has readied up and read their role isn't secret; it shows progress.
             "ready_player_ids": sorted(group.ready),

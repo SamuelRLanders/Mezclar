@@ -18,8 +18,10 @@ def play_to_roles(names: dict[str, str]) -> tuple[KeywordsGame, KeywordsGroup]:
     # Start a game and have every player in the first group ready up.
     game = KeywordsGame.start(names)
     group = game.groups[0]
-    for player_id in group.player_ids:
-        game.mark_ready(player_id)
+    # Single-group games already start on the roles screen.
+    if group.phase == "gathering":
+        for player_id in group.player_ids:
+            game.mark_ready(player_id)
     return game, group
 
 
@@ -53,7 +55,8 @@ def test_groups_balanced_with_one_faker_each(player_count):
 
 
 def test_faker_never_sees_keyword():
-    game = KeywordsGame.start(FOUR_PLAYERS)
+    # Seven players make two groups, so the game starts with a gathering phase.
+    game = KeywordsGame.start({f"p{i}": f"Player {i}" for i in range(7)})
     group = game.groups[0]
 
     # While gathering, nobody has been told their role yet.
@@ -149,8 +152,11 @@ def test_full_game_over_api(client, keywords_game):
     late = client.post(f"/session/{code}/join", json={"player_id": "late", "name": "Late"})
     assert late.status_code == 403
 
-    for player_id in FOUR_PLAYERS:
-        assert client.post(f"/session/{code}/keywords/ready", json={"player_id": player_id}).status_code == 200
+    # Four players make one group, so the game skips gathering and starts on roles.
+    state = client.get(f"/session/{code}/keywords/state", params={"player_id": "a"}).json()
+    assert state["phase"] == "roles"
+    assert state["single_group"] is True
+
     for player_id in FOUR_PLAYERS:
         assert client.post(f"/session/{code}/keywords/role-seen", json={"player_id": player_id}).status_code == 200
 
