@@ -21,7 +21,7 @@ from backend.app.games.keywords.words import KEYWORDS
 # Smallest game that can be played: two players who know the word plus one faker.
 MIN_PLAYERS = 3
 # Largest group size; more players than this means more groups.
-MAX_GROUP_SIZE = 6
+MAX_GROUP_SIZE = 5
 # Longest name or keyword guess a player may type in the voting phase.
 MAX_ANSWER_LENGTH = 50
 

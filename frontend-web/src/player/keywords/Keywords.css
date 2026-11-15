@@ -110,3 +110,94 @@
 .keywords__leave {
   color: var(--text-muted);
 }
+
+/* The group's name above the card on every phase after gathering. */
+.keywords__group-tag {
+  display: inline-block;
+  margin: 0 0 12px;
+  padding: 6px 14px;
+  border-radius: 999px;
+  background: var(--group-color);
+  color: var(--group-text);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+/* Big text for the role, the keyword, and the winner banner. */
+.keywords__role {
+  margin: 8px 0 16px;
+  font-size: 40px;
+  line-height: 1.1;
+}
+
+/* The keyword (or "You're the faker") reminder on the speaking and voting screens. */
+.keywords__reminder {
+  display: inline-block;
+  margin: 0 0 16px;
+  padding: 6px 14px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  font-size: 14px;
+}
+
+/* Speaking order: finished speakers fade, the current speaker stands out. */
+.keywords__order {
+  margin: 0;
+  padding: 0;
+  list-style-position: inside;
+  text-align: left;
+}
+
+.keywords__order-item {
+  padding: 10px 14px;
+  margin-bottom: 6px;
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.18);
+  font-weight: 600;
+}
+
+.keywords__order-item--done {
+  opacity: 0.45;
+  text-decoration: line-through;
+}
+
+.keywords__order-item--current {
+  background: var(--accent);
+  color: var(--accent-text);
+}
+
+/* The voting answer box. */
+.keywords__input {
+  width: 100%;
+  margin-top: 16px;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+  color: var(--text);
+  font-family: inherit;
+  font-size: 16px;
+}
+
+.keywords__input:focus {
+  outline: none;
+  border-color: var(--border-focus);
+}
+
+/* Reveal details: label on the left, value on the right. */
+.keywords__details {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 8px 16px;
+  margin: 24px 0 0;
+  text-align: left;
+}
+
+.keywords__details dt {
+  color: var(--text-muted);
+}
+
+.keywords__details dd {
+  margin: 0;
+  font-weight: 700;
+}

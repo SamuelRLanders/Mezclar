@@ -4,10 +4,15 @@ import { Link, useLocation, useParams } from "react-router-dom";
 import {
   getKeywordsState,
   keywordsAction,
+  keywordsSubmit,
   type KeywordsPlayerView,
 } from "../../api/client";
 import { usePlayerSocket } from "../usePlayerSocket";
 import GatheringPhase from "./GatheringPhase";
+import RevealPhase from "./RevealPhase";
+import RolePhase from "./RolePhase";
+import SpeakingPhase from "./SpeakingPhase";
+import VotingPhase from "./VotingPhase";
 import "./Keywords.css";
 
 interface KeywordsPlayerState {
@@ -105,15 +110,43 @@ export default function KeywordsPlayer() {
         />
       );
       break;
-    default:
-      // Roles, speaking, voting and reveal are still to be built.
+    case "roles":
       screen = (
-        <section className="keywords__card">
-          {!view.single_group && <p className="keywords__eyebrow">{view.group_label} Group</p>}
-          <h1>Coming soon: {view.phase}</h1>
-        </section>
+        <RolePhase
+          view={view}
+          playerId={playerId}
+          busy={busy}
+          onGotIt={() => act(() => keywordsAction(sessionId, "role-seen", playerId))}
+        />
       );
+      break;
+    case "speaking":
+      screen = (
+        <SpeakingPhase
+          view={view}
+          playerId={playerId}
+          busy={busy}
+          onSaid={() => act(() => keywordsAction(sessionId, "word-said", playerId))}
+        />
+      );
+      break;
+    case "voting":
+      screen = (
+        <VotingPhase
+          view={view}
+          playerId={playerId}
+          busy={busy}
+          onSubmit={(text) => act(() => keywordsSubmit(sessionId, playerId, text))}
+        />
+      );
+      break;
+    case "reveal":
+      screen = <RevealPhase view={view} playerId={playerId} />;
+      break;
   }
+
+  // Every phase after gathering shows the group's name, unless there's only one group.
+  const showGroupTag = !view.single_group && view.phase !== "gathering";
 
   /*
    * The color class sets --group-color for every screen, so the group's color is always visible.
@@ -123,6 +156,7 @@ export default function KeywordsPlayer() {
 
   return (
     <main className={`keywords${colorClass}`}>
+      {showGroupTag && <p className="keywords__group-tag">{view.group_label} Group</p>}
       {screen}
 
       {(actionError || socketError) && (
