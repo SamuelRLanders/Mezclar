@@ -13,6 +13,8 @@ dist/
 dist-ssr/
 *.tsbuildinfo
 npm-debug.log*
+test-results/
+playwright-report/
 yarn-error.log*
 
 # Environment / secrets
