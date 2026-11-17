@@ -2,6 +2,7 @@ import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 
 import { GAMES } from "../host/games";
 import GameRules from "./GameRules";
+import ReadAloud from "./ReadAloud";
 import PlayerRoster from "./PlayerRoster";
 import { usePlayerSocket } from "./usePlayerSocket";
 
@@ -66,6 +67,8 @@ export default function GameInSession() {
       <p>
         Welcome, {playerName}. This game has already started.
       </p>
+
+      <ReadAloud text={error || `${game?.name ?? "The game"} is in progress. Read the rules while you wait to join a round.`} />
 
       {game && <GameRules game={game} />}
 

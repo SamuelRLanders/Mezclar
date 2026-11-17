@@ -4,6 +4,7 @@ import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import { GAMES } from "../host/games";
 import { updateReadyStatus } from "../api/client";
 import GameRules from "./GameRules";
+import ReadAloud from "./ReadAloud";
 import PlayerRoster from "./PlayerRoster";
 import { type LobbyPlayer, usePlayerSocket } from "./usePlayerSocket";
 
@@ -106,6 +107,10 @@ export default function PlayerLobby() {
       <p>
         Welcome to the game, {playerName}.
       </p>
+
+      <ReadAloud text={error || `${game?.name ?? "Game"} lobby. ${ready
+        ? "You are ready. Wait for the host to start the game."
+        : "Read the rules, then select I'm ready. The game begins when the host starts it."}`} />
 
       {game && <GameRules game={game} />}
 
