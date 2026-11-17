@@ -1,6 +1,7 @@
 import { useState } from "react";
 
 import type { KeywordsPlayerView } from "../../api/client";
+import ReadAloud from "../ReadAloud";
 
 interface RolePhaseProps {
   view: KeywordsPlayerView;
@@ -24,6 +25,7 @@ export default function RolePhase({ view, playerId, busy, onGotIt }: RolePhasePr
   if (!revealed) {
     return (
       <section className="keywords__card">
+        <ReadAloud text="Keep your role secret. Use headphones for private role instructions. Select Tap to see your role when you are ready." />
         <p className="keywords__eyebrow">Your role is ready</p>
         <h1>Keep it secret</h1>
         <p>
@@ -39,6 +41,10 @@ export default function RolePhase({ view, playerId, busy, onGotIt }: RolePhasePr
 
   return (
     <section className="keywords__card">
+      <ReadAloud text={(view.is_faker
+        ? "You're the faker. Listen to the other players and figure out the keyword. Blend in so nobody suspects you. "
+        : `The keyword is ${view.keyword}. Find the faker without making the keyword too obvious. Don't say it out loud. `)
+        + (hasSeenRole ? "Waiting for your group." : "Select Got it when you understand your role.")} />
       {view.is_faker ? (
         <>
           <p className="keywords__eyebrow">Your role</p>

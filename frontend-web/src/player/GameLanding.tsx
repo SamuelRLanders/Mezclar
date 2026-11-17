@@ -8,6 +8,7 @@ import {
   submitVote,
 } from "../api/client";
 import QuipInput from "./QuipInput";
+import ReadAloud from "./ReadAloud";
 import "./GameLanding.css";
 import { GAMES } from "../host/games";
 
@@ -54,6 +55,7 @@ export default function GameLanding() {
   const [voteSubmitted, setVoteSubmitted] = useState(false);
   const [voteError, setVoteError] = useState("");
   const [voteSubmitting, setVoteSubmitting] = useState(false);
+  const [submittedRound, setSubmittedRound] = useState<number | null>(null);
 
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
@@ -274,6 +276,35 @@ export default function GameLanding() {
     ([, scoreA], [, scoreB]) => scoreB - scoreA,
   );
 
+  const responseReceived = submittedRound === session?.current_round
+    || !!(playerId && session?.submitted_player_ids.includes(playerId));
+  let readAloudText = "Waiting for the game to begin.";
+  if (loading) {
+    readAloudText = "Loading your game. Please wait.";
+  } else if (error) {
+    readAloudText = error;
+  } else if (isFinished) {
+    readAloudText = "Game over! Review the leaderboard and round recap for the final results.";
+  } else if (isAnswering && session) {
+    const instruction = session.game_paused
+      ? "The game is paused. Wait for the host to resume."
+      : responseReceived
+        ? "Response received. Wait for the other players to finish."
+        : secondsRemaining === 0
+          ? "Time is up. Wait for voting to begin."
+          : "Type your funniest answer, up to 200 characters, then select Submit quip.";
+    readAloudText = `Round ${session.current_round}. ${prompt || "Waiting for your prompt."} ${instruction}`;
+  } else if (isVoting && session) {
+    readAloudText = voteSubmitted
+      ? "Votes locked in! Wait for the other players to finish voting."
+      : voting?.round === session.current_round
+        ? "Choose one answer for every prompt, then select Lock in my votes. "
+          + voting.groups.map((group) => `${group.prompt} ` + group.answers.map((answer, index) =>
+            `Option ${String.fromCharCode(65 + index)}: ${answer.answer}.`,
+          ).join(" ")).join(" ")
+        : "Voting is about to begin. Your answer choices will appear shortly.";
+  }
+
   return (
     <main className="game">
       <div className="game__inner">
@@ -300,6 +331,11 @@ export default function GameLanding() {
             </span>
           )}
         </header>
+
+        <ReadAloud
+          text={readAloudText}
+          contentKey={`${sessionId}:${playerId}:${session?.current_round}:${session?.phase}`}
+        />
 
         {loading && (
           <section className="game__message-card">
@@ -384,6 +420,7 @@ export default function GameLanding() {
                       acceptedAnswer={session.submitted_player_ids.includes(playerId)
                         ? session.groups.find((group) => Object.hasOwn(group.answers, playerId))?.answers[playerId]
                         : undefined}
+                      onSubmitted={() => setSubmittedRound(session.current_round)}
                     />
                   </div>
                 )}

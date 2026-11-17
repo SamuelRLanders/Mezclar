@@ -8,6 +8,7 @@ import {
   type KeywordsPlayerView,
 } from "../../api/client";
 import { usePlayerSocket } from "../usePlayerSocket";
+import ReadAloud from "../ReadAloud";
 import GatheringPhase from "./GatheringPhase";
 import RevealPhase from "./RevealPhase";
 import RolePhase from "./RolePhase";
@@ -83,6 +84,7 @@ export default function KeywordsPlayer() {
   if (!sessionId || !playerId) {
     return (
       <main className="keywords">
+        <ReadAloud text="Missing session or player information. Please rejoin the game." />
         <p role="alert">Missing session or player information. Please rejoin the game.</p>
         <Link to="/">Back to start</Link>
       </main>
@@ -92,6 +94,7 @@ export default function KeywordsPlayer() {
   if (!view) {
     return (
       <main className="keywords">
+        <ReadAloud text={actionError || "Loading your game. Please wait."} />
         <p>{actionError || "Loading your game..."}</p>
       </main>
     );
@@ -154,8 +157,40 @@ export default function KeywordsPlayer() {
    */
   const colorClass = view.single_group ? "" : ` keywords--${view.group_color.toLowerCase()}`;
 
+  let readAloudText = "";
+  if (view.phase === "gathering") {
+    const teammates = view.members.filter((member) => member.player_id !== playerId);
+    readAloudText = `${view.group_label} Group. Find your group: ${teammates.map((member) => member.name).join(", ")}. `
+      + (view.ready_player_ids.includes(playerId)
+        ? "Waiting for your group."
+        : `Hold up your phone and look for other ${view.group_label} screens. Select I'm with my group when you find them.`);
+  } else if (view.phase === "speaking") {
+    const speaker = view.members.find((member) => member.player_id === view.current_speaker_id);
+    const role = view.is_faker ? "You're the faker." : `Keyword: ${view.keyword}.`;
+    readAloudText = role + " " + (view.current_speaker_id === playerId
+      ? "Your turn! Say one word out loud related to the keyword, then select I said my word. Don't say the keyword itself."
+      : `Listen to ${speaker?.name ?? "the next player"}. Listen closely to the word they say.`);
+  } else if (view.phase === "voting") {
+    readAloudText = view.has_submitted
+      ? "Answer locked in. Waiting for the rest of your group to answer."
+      : view.is_faker
+        ? "Guess the keyword. Type the word you think everyone else was given, then select Lock in answer."
+        : "Who's the faker? Type the name of the player you suspect, then select Lock in answer. Players: "
+          + view.members.filter((member) => member.player_id !== playerId).map((member) => member.name).join(", ");
+  } else if (view.phase === "reveal") {
+    readAloudText = view.result
+      ? `${view.result.winner === "faker" ? "The faker wins!" : "Players win!"} The faker was ${view.result.faker_name}. The keyword was ${view.result.keyword}. Review the results below.`
+      : "Revealing results. Please wait.";
+  }
+
   return (
     <main className={`keywords${colorClass}`}>
+      {view.phase !== "roles" && (
+        <ReadAloud
+          text={actionError || socketError || readAloudText}
+          contentKey={`${sessionId}:${playerId}:${view.group_index}:${view.phase}`}
+        />
+      )}
       {showGroupTag && <p className="keywords__group-tag">{view.group_label} Group</p>}
       {screen}
 

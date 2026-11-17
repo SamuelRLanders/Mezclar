@@ -10,6 +10,7 @@ type QuipInputProps = {
   currentRound: number;
   acceptedAnswer?: string;
   disabled?: boolean;
+  onSubmitted: () => void;
 };
 
 export default function QuipInput({
@@ -18,6 +19,7 @@ export default function QuipInput({
   currentRound,
   acceptedAnswer,
   disabled = false,
+  onSubmitted,
 }: QuipInputProps) {
   const [quip, setQuip] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -44,6 +46,7 @@ export default function QuipInput({
     try {
       await submitAnswer(sessionId, playerId, quip.trim(), currentRound);
       setSubmitted(true);
+      onSubmitted();
     } catch (error) {
       const session = await getSession(sessionId).catch(() => null);
       const received = session?.current_round === currentRound
@@ -51,6 +54,7 @@ export default function QuipInput({
       if (received) {
         setQuip(session.groups.find((group) => Object.hasOwn(group.answers, playerId))?.answers[playerId] ?? quip);
         setSubmitted(true);
+        onSubmitted();
       } else {
         setMessage(
           error instanceof Error
