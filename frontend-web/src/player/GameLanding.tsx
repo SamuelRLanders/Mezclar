@@ -9,6 +9,7 @@ import {
 } from "../api/client";
 import QuipInput from "./QuipInput";
 import ReadAloud from "./ReadAloud";
+import GameRulesToggle from "./GameRulesToggle";
 import "./GameLanding.css";
 import { GAMES } from "../host/games";
 
@@ -336,6 +337,7 @@ export default function GameLanding() {
           text={readAloudText}
           contentKey={`${sessionId}:${playerId}:${session?.current_round}:${session?.phase}`}
         />
+        {session && <GameRulesToggle gameId={session.game_id} />}
 
         {loading && (
           <section className="game__message-card">

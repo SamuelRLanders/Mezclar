@@ -9,6 +9,7 @@ import {
 } from "../../api/client";
 import { usePlayerSocket } from "../usePlayerSocket";
 import ReadAloud from "../ReadAloud";
+import GameRulesToggle from "../GameRulesToggle";
 import GatheringPhase from "./GatheringPhase";
 import RevealPhase from "./RevealPhase";
 import RolePhase from "./RolePhase";
@@ -191,6 +192,7 @@ export default function KeywordsPlayer() {
           contentKey={`${sessionId}:${playerId}:${view.group_index}:${view.phase}`}
         />
       )}
+      <GameRulesToggle gameId="keywords" />
       {showGroupTag && <p className="keywords__group-tag">{view.group_label} Group</p>}
       {screen}
 

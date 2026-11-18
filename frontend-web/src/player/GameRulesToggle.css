@@ -1,0 +1,20 @@
+.game-rules-toggle {
+  margin-bottom: 24px;
+}
+
+.game-rules-toggle > button {
+  min-height: 44px;
+  padding: 8px 16px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.game-rules-toggle > button:focus-visible {
+  outline: 2px solid var(--border-focus);
+  outline-offset: 3px;
+}
