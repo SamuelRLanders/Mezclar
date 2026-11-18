@@ -112,7 +112,7 @@ export default function PlayerLobby() {
         ? "You are ready. Wait for the host to start the game."
         : "Read the rules, then select I'm ready. The game begins when the host starts it."}`} />
 
-      {game && <GameRules game={game} />}
+      {game && <GameRules key={game.id} gameId={game.id} />}
 
       <section
         style={{

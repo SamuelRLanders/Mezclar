@@ -70,7 +70,7 @@ export default function GameInSession() {
 
       <ReadAloud text={error || `${game?.name ?? "The game"} is in progress. Read the rules while you wait to join a round.`} />
 
-      {game && <GameRules game={game} />}
+      {game && <GameRules key={game.id} gameId={game.id} />}
 
       <section
         style={{
